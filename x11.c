@@ -363,6 +363,15 @@ x11_run(int blur_radius, double darken, const char *bg_color)
         x11_lock_layout();
 
         char *username = getenv("USER");
+        if (!username) {
+                fprintf(stderr, "x11: $USER not set\n");
+                x11_ungrab_input();
+                x11_restore_layout();
+                x11_destroy_image(img);
+                x11_cleanup();
+                return 1;
+        }
+
         char password[256];
         int pos = 0;
         password[0] = '\0';

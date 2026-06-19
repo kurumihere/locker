@@ -14,6 +14,8 @@
 #include "util.h"
 #include "wayland.h"
 
+struct wl_state;
+
 struct wl_output_info {
         struct wl_list link;
         uint32_t name;
@@ -23,7 +25,8 @@ struct wl_output_info {
         struct wl_buffer *buffer;
         void *shm_data;
         int w, h;
-        int configured;
+        unsigned long bg_pixel;
+        struct wl_state *state;
 };
 
 struct wl_state {
@@ -37,7 +40,6 @@ struct wl_state {
         struct ext_session_lock_v1 *lock;
         struct wl_list outputs;
         int running;
-        int locked;
         char password[256];
         int pos;
         char *username;
@@ -69,6 +71,7 @@ registry_global(void *data, struct wl_registry *registry, uint32_t name,
                 if (!oi)
                         return;
                 oi->name = name;
+                oi->state = wl;
                 oi->w = 16;
                 oi->h = 16;
                 oi->output =
@@ -241,7 +244,13 @@ lock_surface_configure(void *data, struct ext_session_lock_surface_v1 *ls,
 
         oi->w = w;
         oi->h = h;
-        oi->configured = 1;
+
+        if (make_buffer(oi->state, oi, oi->bg_pixel) != 0)
+                return;
+
+        wl_surface_damage(oi->surface, 0, 0, w, h);
+        wl_surface_attach(oi->surface, oi->buffer, 0, 0);
+        wl_surface_commit(oi->surface);
 }
 
 static const struct ext_session_lock_surface_v1_listener lock_surface_listener =
@@ -260,8 +269,7 @@ lock_finished(void *data, struct ext_session_lock_v1 *lock)
 static void
 lock_locked(void *data, struct ext_session_lock_v1 *lock)
 {
-        struct wl_state *wl = data;
-        wl->locked = 1;
+        (void)data;
         (void)lock;
 }
 
@@ -372,7 +380,7 @@ keyboard_key(void *data, struct wl_keyboard *keyboard, uint32_t serial,
         if (!wl->xkb_state)
                 return;
 
-        xkb_keysym_t sym = xkb_state_key_get_one_sym(wl->xkb_state, key + 8);
+        xkb_keysym_t sym = xkb_state_key_get_one_sym(wl->xkb_state, key);
         if (sym == XKB_KEY_Return || sym == XKB_KEY_KP_Enter) {
                 int rc = locker_pam_auth(wl->username, wl->password);
                 if (rc == 0) {
@@ -498,6 +506,10 @@ wayland_run(int blur_radius, double darken, const char *bg_color)
                 wl_seat_add_listener(wl.seat, &seat_listener, &wl);
         wl_display_roundtrip(wl.display);
 
+        /* keyboard listener (must be set before any roundtrip that may deliver .enter) */
+        if (wl.keyboard)
+                wl_keyboard_add_listener(wl.keyboard, &keyboard_listener, &wl);
+
         /* bind output listeners and create lock surfaces */
         {
                 struct wl_output_info *oi;
@@ -512,6 +524,15 @@ wayland_run(int blur_radius, double darken, const char *bg_color)
         /* lock */
         wl.lock = ext_session_lock_manager_v1_lock(wl.lock_manager);
         ext_session_lock_v1_add_listener(wl.lock, &lock_listener, &wl);
+
+        /* set background pixel on all outputs */
+        {
+                struct wl_output_info *oi;
+                wl_list_for_each(oi, &wl.outputs, link)
+                {
+                        oi->bg_pixel = bg_pixel;
+                }
+        }
 
         /* create lock surfaces for all outputs */
         {
@@ -535,28 +556,11 @@ wayland_run(int blur_radius, double darken, const char *bg_color)
                 return 1;
         }
 
-        /* now that we're locked, attach buffers to surfaces */
-        {
-                struct wl_output_info *oi;
-                wl_list_for_each(oi, &wl.outputs, link)
-                {
-                        if (oi->w > 0 && oi->h > 0) {
-                                make_buffer(&wl, oi, bg_pixel);
-                                wl_surface_attach(oi->surface, oi->buffer, 0,
-                                                  0);
-                                wl_surface_commit(oi->surface);
-                        }
-                }
-        }
-        wl_display_roundtrip(wl.display);
-
-        /* keyboard listener */
-        if (wl.keyboard)
-                wl_keyboard_add_listener(wl.keyboard, &keyboard_listener, &wl);
-
         /* main loop */
         while (wl.running && wl_display_dispatch(wl.display) >= 0)
                 ;
+
+        secure_zero(wl.password, sizeof(wl.password));
 
         /* cleanup lock surfaces */
         {

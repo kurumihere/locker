@@ -44,13 +44,7 @@ main(int argc, char **argv)
                 }
         }
 
-        if (bg_color) {
-                unsigned long rgb;
-                if (parse_hex(bg_color, &rgb) != 0) {
-                        fprintf(stderr, "main: invalid color '%s'\n", bg_color);
-                        return 1;
-                }
-        }
+        /* color validated by backend */
 
         if (getenv("WAYLAND_DISPLAY"))
                 return wayland_run(blur_radius, darken, bg_color);
