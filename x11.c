@@ -273,12 +273,6 @@ x11_draw_message(Window win, const char *msg)
 }
 
 void
-x11_clear_area(Window win, int x, int y, int w, int h)
-{
-        XClearArea(d, win, x, y, w, h, False);
-}
-
-void
 x11_lock_layout(void)
 {
         XkbStateRec state;
@@ -297,22 +291,8 @@ x11_restore_layout(void)
 }
 
 int
-x11_width(void)
-{
-        return win_w;
-}
-int
-x11_height(void)
-{
-        return win_h;
-}
-
-int
 x11_run(int blur_radius, double darken, const char *bg_color)
 {
-        (void)blur_radius;
-        (void)darken;
-
         if (x11_init() != 0)
                 return 1;
 
