@@ -1,4 +1,4 @@
-#define _POSIX_C_SOURCE 200809L
+#define _GNU_SOURCE
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,6 +23,7 @@ struct wl_output_info {
         struct wl_surface *surface;
         struct ext_session_lock_surface_v1 *lock_surface;
         struct wl_buffer *buffer;
+        struct wl_shm_pool *pool;
         void *shm_data;
         int w, h;
         unsigned long bg_pixel;
@@ -96,6 +97,8 @@ registry_global_remove(void *data, struct wl_registry *registry, uint32_t name)
                         wl_list_remove(&oi->link);
                         if (oi->buffer)
                                 wl_buffer_destroy(oi->buffer);
+                        if (oi->pool)
+                                wl_shm_pool_destroy(oi->pool);
                         if (oi->shm_data)
                                 munmap(oi->shm_data, oi->w * oi->h * 4);
                         if (oi->lock_surface)
@@ -171,11 +174,9 @@ static const struct wl_output_listener output_listener = {
 static int
 create_shm_fd(size_t size)
 {
-        char name[] = "/tmp/locker-XXXXXX";
-        int fd = mkstemp(name);
+        int fd = memfd_create("locker", MFD_CLOEXEC);
         if (fd < 0)
                 return -1;
-        unlink(name);
         if (ftruncate(fd, (off_t)size) < 0) {
                 close(fd);
                 return -1;
@@ -213,12 +214,24 @@ make_buffer(struct wl_state *wl, struct wl_output_info *oi, unsigned long pixel)
         for (int i = 0; i < oi->w * oi->h; i++)
                 px[i] = (uint32_t)pixel;
 
-        struct wl_shm_pool *pool = wl_shm_create_pool(wl->shm, fd, size);
-        oi->buffer = wl_shm_pool_create_buffer(pool, 0, oi->w, oi->h, stride,
-                                               WL_SHM_FORMAT_ARGB8888);
-        wl_buffer_add_listener(oi->buffer, &buffer_listener, NULL);
-        wl_shm_pool_destroy(pool);
+        if (oi->pool) {
+                wl_shm_pool_destroy(oi->pool);
+                oi->pool = NULL;
+        }
+        if (oi->buffer) {
+                wl_buffer_destroy(oi->buffer);
+                oi->buffer = NULL;
+        }
 
+        oi->pool = wl_shm_create_pool(wl->shm, fd, size);
+        oi->buffer = wl_shm_pool_create_buffer(oi->pool, 0, oi->w, oi->h,
+                                                stride, WL_SHM_FORMAT_ARGB8888);
+        wl_buffer_add_listener(oi->buffer, &buffer_listener, NULL);
+
+        if (oi->shm_data) {
+                munmap(oi->shm_data, oi->h * oi->w * 4);
+                oi->shm_data = NULL;
+        }
         oi->shm_data = data;
         close(fd);
         return 0;
@@ -235,21 +248,14 @@ lock_surface_configure(void *data, struct ext_session_lock_surface_v1 *ls,
 
         ext_session_lock_surface_v1_ack_configure(ls, serial);
 
-        if (oi->buffer)
-                wl_buffer_destroy(oi->buffer);
-        if (oi->shm_data) {
-                munmap(oi->shm_data, oi->h * oi->w * 4);
-                oi->shm_data = NULL;
-        }
-
         oi->w = w;
         oi->h = h;
 
         if (make_buffer(oi->state, oi, oi->bg_pixel) != 0)
                 return;
 
-        wl_surface_damage(oi->surface, 0, 0, w, h);
         wl_surface_attach(oi->surface, oi->buffer, 0, 0);
+        wl_surface_damage(oi->surface, 0, 0, w, h);
         wl_surface_commit(oi->surface);
 }
 
@@ -570,6 +576,8 @@ wayland_run(int blur_radius, double darken, const char *bg_color)
                         wl_list_remove(&oi->link);
                         if (oi->buffer)
                                 wl_buffer_destroy(oi->buffer);
+                        if (oi->pool)
+                                wl_shm_pool_destroy(oi->pool);
                         if (oi->shm_data)
                                 munmap(oi->shm_data, oi->w * oi->h * 4);
                         if (oi->lock_surface)
