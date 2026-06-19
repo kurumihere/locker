@@ -7,6 +7,8 @@ int x11_init(void);
 void x11_cleanup(void);
 
 XImage *x11_capture_screen(void);
+XImage *x11_create_solid(unsigned long pixel);
+void x11_blur_image(XImage *img, int radius);
 void x11_darken_image(XImage *img, double factor);
 void x11_destroy_image(XImage *img);
 

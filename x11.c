@@ -72,6 +72,67 @@ x11_capture_screen(void)
 }
 
 void
+x11_blur_image(XImage *img, int radius)
+{
+        if (radius < 1)
+                return;
+
+        int w = img->width, h = img->height;
+        unsigned long *buf = malloc(w * h * sizeof(unsigned long));
+        unsigned long *tmp = malloc(w * h * sizeof(unsigned long));
+        if (!buf || !tmp) {
+                free(buf);
+                free(tmp);
+                return;
+        }
+
+        for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                        buf[y * w + x] = XGetPixel(img, x, y);
+
+        for (int y = 0; y < h; y++) {
+                for (int x = 0; x < w; x++) {
+                        int s = x - radius > 0 ? x - radius : 0;
+                        int e = x + radius < w - 1 ? x + radius : w - 1;
+                        int n = e - s + 1;
+                        unsigned long r = 0, g = 0, b = 0;
+                        for (int k = s; k <= e; k++) {
+                                unsigned long p = buf[y * w + k];
+                                r += (p >> 16) & 0xFF;
+                                g += (p >> 8) & 0xFF;
+                                b += p & 0xFF;
+                        }
+                        tmp[y * w + x] = (0xFFUL << 24) | ((r / n) << 16) |
+                                         ((g / n) << 8) | (b / n);
+                }
+        }
+
+        for (int y = 0; y < h; y++) {
+                for (int x = 0; x < w; x++) {
+                        int s = y - radius > 0 ? y - radius : 0;
+                        int e = y + radius < h - 1 ? y + radius : h - 1;
+                        int n = e - s + 1;
+                        unsigned long r = 0, g = 0, b = 0;
+                        for (int k = s; k <= e; k++) {
+                                unsigned long p = tmp[k * w + x];
+                                r += (p >> 16) & 0xFF;
+                                g += (p >> 8) & 0xFF;
+                                b += p & 0xFF;
+                        }
+                        buf[y * w + x] = (0xFFUL << 24) | ((r / n) << 16) |
+                                         ((g / n) << 8) | (b / n);
+                }
+        }
+
+        for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                        XPutPixel(img, x, y, buf[y * w + x]);
+
+        free(buf);
+        free(tmp);
+}
+
+void
 x11_darken_image(XImage *img, double factor)
 {
         for (int y = 0; y < img->height; y++) {
@@ -87,6 +148,19 @@ x11_darken_image(XImage *img, double factor)
                         XPutPixel(img, x, y, p);
                 }
         }
+}
+
+XImage *
+x11_create_solid(unsigned long pixel)
+{
+        XImage *img =
+            XGetImage(d, root, 0, 0, win_w, win_h, AllPlanes, ZPixmap);
+        if (!img)
+                return NULL;
+        for (int y = 0; y < win_h; y++)
+                for (int x = 0; x < win_w; x++)
+                        XPutPixel(img, x, y, pixel);
+        return img;
 }
 
 void
