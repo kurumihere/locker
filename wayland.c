@@ -283,7 +283,16 @@ seat_capabilities(void *data, struct wl_seat *seat, uint32_t caps)
         }
 }
 
-static const struct wl_seat_listener seat_listener = {seat_capabilities, NULL};
+static void
+seat_name(void *data, struct wl_seat *seat, const char *name)
+{
+        (void)data;
+        (void)seat;
+        (void)name;
+}
+
+static const struct wl_seat_listener seat_listener = {seat_capabilities,
+                                                       seat_name};
 
 /* keyboard */
 
