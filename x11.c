@@ -227,9 +227,11 @@ x11_grab_input(Window win)
                 return -1;
         }
 
-        XGrabPointer(d, win, True,
+        int pr = XGrabPointer(d, win, True,
                      ButtonPressMask | ButtonReleaseMask | PointerMotionMask,
                      GrabModeAsync, GrabModeAsync, win, None, CurrentTime);
+        if (pr != GrabSuccess)
+                fprintf(stderr, "x11: cannot grab pointer\n");
 
         return 0;
 }
@@ -305,14 +307,6 @@ x11_height(void)
         return win_h;
 }
 
-static void
-secure_zero(void *s, size_t n)
-{
-        volatile unsigned char *p = s;
-        while (n--)
-                *p++ = 0;
-}
-
 int
 x11_run(int blur_radius, double darken, const char *bg_color)
 {
@@ -358,6 +352,7 @@ x11_run(int blur_radius, double darken, const char *bg_color)
         Window win = x11_create_window();
         x11_show_image(win, img);
         x11_hide_cursor(win);
+        XFlush(d);
 
         if (x11_grab_input(win) != 0) {
                 x11_destroy_image(img);

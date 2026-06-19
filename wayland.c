@@ -66,6 +66,8 @@ registry_global(void *data, struct wl_registry *registry, uint32_t name,
                     wl_registry_bind(registry, name, &wl_seat_interface, 7);
         } else if (strcmp(interface, "wl_output") == 0) {
                 struct wl_output_info *oi = calloc(1, sizeof(*oi));
+                if (!oi)
+                        return;
                 oi->name = name;
                 oi->w = 16;
                 oi->h = 16;
@@ -303,15 +305,26 @@ keyboard_keymap(void *data, struct wl_keyboard *keyboard, uint32_t format,
                 return;
         }
 
-        wl->xkb_keymap = xkb_keymap_new_from_string(
+        struct xkb_keymap *new_keymap = xkb_keymap_new_from_string(
             wl->xkb_ctx, map_str, XKB_KEYMAP_FORMAT_TEXT_V1, 0);
         munmap(map_str, size);
         close(fd);
 
-        if (!wl->xkb_keymap)
+        if (!new_keymap)
                 return;
 
-        wl->xkb_state = xkb_state_new(wl->xkb_keymap);
+        struct xkb_state *new_state = xkb_state_new(new_keymap);
+        if (!new_state) {
+                xkb_keymap_unref(new_keymap);
+                return;
+        }
+
+        if (wl->xkb_state)
+                xkb_state_unref(wl->xkb_state);
+        if (wl->xkb_keymap)
+                xkb_keymap_unref(wl->xkb_keymap);
+        wl->xkb_keymap = new_keymap;
+        wl->xkb_state = new_state;
 }
 
 static void
@@ -354,10 +367,11 @@ keyboard_key(void *data, struct wl_keyboard *keyboard, uint32_t serial,
         if (sym == XKB_KEY_Return || sym == XKB_KEY_KP_Enter) {
                 int rc = locker_pam_auth(wl->username, wl->password);
                 if (rc == 0) {
+                        secure_zero(wl->password, sizeof(wl->password));
                         wl->running = 0;
                 } else {
+                        secure_zero(wl->password, sizeof(wl->password));
                         wl->pos = 0;
-                        wl->password[0] = '\0';
                 }
         } else if (sym == XKB_KEY_BackSpace) {
                 if (wl->pos > 0) {
@@ -365,8 +379,8 @@ keyboard_key(void *data, struct wl_keyboard *keyboard, uint32_t serial,
                         wl->password[wl->pos] = '\0';
                 }
         } else if (sym == XKB_KEY_Escape) {
+                secure_zero(wl->password, sizeof(wl->password));
                 wl->pos = 0;
-                wl->password[0] = '\0';
         } else {
                 char buf[8];
                 int n = xkb_keysym_to_utf8(sym, buf, sizeof(buf));
@@ -438,6 +452,14 @@ wayland_run(int blur_radius, double darken, const char *bg_color)
         wl.xkb_ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
         if (!wl.xkb_ctx) {
                 fprintf(stderr, "wayland: failed to create xkb context\n");
+                return 1;
+        }
+
+        /* username */
+        wl.username = getenv("USER");
+        if (!wl.username) {
+                fprintf(stderr, "wayland: $USER not set\n");
+                xkb_context_unref(wl.xkb_ctx);
                 return 1;
         }
 
@@ -520,7 +542,6 @@ wayland_run(int blur_radius, double darken, const char *bg_color)
         wl_display_roundtrip(wl.display);
 
         /* keyboard listener */
-        wl.username = getenv("USER");
         if (wl.keyboard)
                 wl_keyboard_add_listener(wl.keyboard, &keyboard_listener, &wl);
 
