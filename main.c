@@ -44,10 +44,5 @@ main(int argc, char **argv)
                 }
         }
 
-        /* color validated by backend */
-
-        if (getenv("WAYLAND_DISPLAY"))
-                return wayland_run(blur_radius, darken, bg_color);
-        else
-                return x11_run(blur_radius, darken, bg_color);
+        return x11_run(blur_radius, darken, bg_color);
 }
