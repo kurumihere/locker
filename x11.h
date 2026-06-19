@@ -29,5 +29,6 @@ void x11_clear_area(Window win, int x, int y, int w, int h);
 
 int x11_width(void);
 int x11_height(void);
+int x11_run(int blur_radius, double darken, const char *bg_color);
 
 #endif

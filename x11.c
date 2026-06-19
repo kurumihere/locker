@@ -1,5 +1,7 @@
 #define _POSIX_C_SOURCE 199309L
 #include "x11.h"
+#include "pam_auth.h"
+#include "util.h"
 #include <X11/XKBlib.h>
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
@@ -301,4 +303,144 @@ int
 x11_height(void)
 {
         return win_h;
+}
+
+static void
+secure_zero(void *s, size_t n)
+{
+        volatile unsigned char *p = s;
+        while (n--)
+                *p++ = 0;
+}
+
+int
+x11_run(int blur_radius, double darken, const char *bg_color)
+{
+        (void)blur_radius;
+        (void)darken;
+
+        if (x11_init() != 0)
+                return 1;
+
+        XImage *img = NULL;
+
+        if (bg_color) {
+                unsigned long rgb;
+                if (parse_hex(bg_color, &rgb) != 0) {
+                        fprintf(stderr, "x11: invalid color '%s'\n", bg_color);
+                        x11_cleanup();
+                        return 1;
+                }
+                unsigned char r = (rgb >> 16) & 0xFF;
+                unsigned char g = (rgb >> 8) & 0xFF;
+                unsigned char b = rgb & 0xFF;
+                unsigned long pixel = (0xFFUL << 24) | (r << 16) | (g << 8) | b;
+                img = x11_create_solid(pixel);
+        } else {
+                img = x11_capture_screen();
+                if (!img) {
+                        fprintf(stderr, "x11: failed to capture screen\n");
+                        x11_cleanup();
+                        return 1;
+                }
+                if (blur_radius > 0)
+                        x11_blur_image(img, blur_radius);
+                if (darken > 0)
+                        x11_darken_image(img, darken);
+        }
+
+        if (!img) {
+                fprintf(stderr, "x11: failed to create image\n");
+                x11_cleanup();
+                return 1;
+        }
+
+        Window win = x11_create_window();
+        x11_show_image(win, img);
+        x11_hide_cursor(win);
+
+        if (x11_grab_input(win) != 0) {
+                x11_destroy_image(img);
+                x11_cleanup();
+                return 1;
+        }
+
+        x11_lock_layout();
+
+        char *username = getenv("USER");
+        char password[256];
+        int pos = 0;
+        password[0] = '\0';
+
+        x11_draw_message(win, "Enter password:");
+        x11_draw_indicator(win, 0);
+
+        XEvent ev;
+        while (x11_next_event(&ev) == 0) {
+                if (ev.type == Expose) {
+                        x11_show_image(win, img);
+                        x11_draw_message(win, "Enter password:");
+                        x11_draw_indicator(win, pos);
+                        continue;
+                }
+
+                if (ev.type != KeyPress)
+                        continue;
+
+                char buf[32] = {0};
+                KeySym ks;
+                XLookupString(&ev.xkey, buf, sizeof(buf), &ks, NULL);
+
+                if (ks == XK_Return) {
+                        if (password[0] == '\0') {
+                                x11_show_image(win, img);
+                                x11_draw_message(win, "Enter password:");
+                                x11_draw_indicator(win, 0);
+                                continue;
+                        }
+
+                        int ok = locker_pam_auth(username, password);
+
+                        secure_zero(password, sizeof(password));
+                        pos = 0;
+
+                        if (ok == 0)
+                                break;
+
+                        x11_show_image(win, img);
+                        x11_draw_message(win, "Wrong password");
+                        x11_draw_indicator(win, 0);
+
+                } else if (ks == XK_Escape) {
+                        secure_zero(password, sizeof(password));
+                        pos = 0;
+                        x11_show_image(win, img);
+                        x11_draw_message(win, "Enter password:");
+                        x11_draw_indicator(win, 0);
+
+                } else if (ks == XK_BackSpace) {
+                        if (pos > 0)
+                                password[--pos] = '\0';
+
+                        x11_show_image(win, img);
+                        x11_draw_message(win, "Enter password:");
+                        x11_draw_indicator(win, pos);
+
+                } else if (buf[0] >= 32 && buf[0] < 127) {
+                        if (pos < (int)sizeof(password) - 1) {
+                                password[pos++] = buf[0];
+                                password[pos] = '\0';
+                        }
+
+                        x11_show_image(win, img);
+                        x11_draw_message(win, "Enter password:");
+                        x11_draw_indicator(win, pos);
+                }
+        }
+
+        x11_ungrab_input();
+        x11_restore_layout();
+        x11_destroy_image(img);
+        x11_cleanup();
+        return 0;
 }
