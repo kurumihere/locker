@@ -26,6 +26,23 @@ static XftFont *font = NULL;
 static XftColor color;
 static int old_kb_group = -1;
 
+static unsigned long color_bg;
+static unsigned long color_ring_idle;
+static unsigned long color_ring_active;
+static unsigned long color_ring_err;
+static unsigned long color_ring_auth;
+
+static unsigned long
+x11_get_color(const char *hex)
+{
+        XColor xc;
+        Colormap cmap = DefaultColormap(d, screen);
+        if (XParseColor(d, cmap, hex, &xc) && XAllocColor(d, cmap, &xc)) {
+                return xc.pixel;
+        }
+        return BlackPixel(d, screen);
+}
+
 int
 x11_init(void)
 {
@@ -64,6 +81,12 @@ x11_init(void)
 
         unsigned long white = WhitePixel(d, screen);
         XSetForeground(d, gc, white);
+
+        color_bg = x11_get_color("#1a1a1a");
+        color_ring_idle = x11_get_color("#444444");
+        color_ring_active = x11_get_color("#00d2ff");
+        color_ring_err = x11_get_color("#ef4444");
+        color_ring_auth = x11_get_color("#3b82f6");
 
         return 0;
 }
@@ -204,10 +227,17 @@ x11_redraw(Window win, XImage *img, const char *msg, int pos, unsigned long bg_p
         if (pm_draw) {
                 if (msg)
                         x11_draw_message(win, pm_draw, msg);
-                if (pos >= 0)
-                        x11_draw_indicator(win, pm_draw, pos);
                 XftDrawDestroy(pm_draw);
         }
+
+        const char *state = "normal";
+        if (msg) {
+                if (strcmp(msg, "Wrong password") == 0)
+                        state = "wrong";
+                else if (strcmp(msg, "Authenticating...") == 0)
+                        state = "checking";
+        }
+        x11_draw_indicator(pm, pos, state);
 
         XCopyArea(d, pm, win, gc, 0, 0, win_w, win_h, 0, 0);
         XFreePixmap(d, pm);
@@ -261,21 +291,37 @@ x11_next_event(XEvent *ev)
 }
 
 void
-x11_draw_indicator(Window win, XftDraw *draw, int count)
+x11_draw_indicator(Drawable pm, int count, const char *state)
 {
-        (void)win;
         int cx = win_w / 2;
-        int cy = win_h / 2 + 20;
-        XGlyphInfo extents;
-        XftTextExtentsUtf8(d, font, (const FcChar8 *)"*", 1, &extents);
-        int char_w = extents.xOff;
-        int total_w = count * char_w;
-        int start_x = cx - total_w / 2;
+        int cy = win_h / 2 + 40;
+        int r = 30;
 
-        for (int i = 0; i < count; i++) {
-                XftDrawStringUtf8(draw, &color, font, start_x + i * char_w, cy,
-                                  (const FcChar8 *)"*", 1);
+        /* 1. Draw inner filled circle (background) */
+        XSetForeground(d, gc, color_bg);
+        XFillArc(d, pm, gc, cx - r, cy - r, 2 * r, 2 * r, 0, 360 * 64);
+
+        /* 2. Draw base outer ring */
+        XSetLineAttributes(d, gc, 3, LineSolid, CapRound, JoinRound);
+        XSetForeground(d, gc, color_ring_idle);
+        XDrawArc(d, pm, gc, cx - r, cy - r, 2 * r, 2 * r, 0, 360 * 64);
+
+        /* 3. Draw active state elements */
+        if (strcmp(state, "wrong") == 0) {
+                XSetForeground(d, gc, color_ring_err);
+                XDrawArc(d, pm, gc, cx - r, cy - r, 2 * r, 2 * r, 0, 360 * 64);
+        } else if (strcmp(state, "checking") == 0) {
+                XSetForeground(d, gc, color_ring_auth);
+                XDrawArc(d, pm, gc, cx - r, cy - r, 2 * r, 2 * r, 45 * 64, 270 * 64);
+        } else if (count > 0) {
+                XSetForeground(d, gc, color_ring_active);
+                int start_angle = 90 * 64;
+                int travel = -(count * 30) * 64;
+                XDrawArc(d, pm, gc, cx - r, cy - r, 2 * r, 2 * r, start_angle, travel);
+                XFillArc(d, pm, gc, cx - 4, cy - 4, 8, 8, 0, 360 * 64);
         }
+
+        XSetLineAttributes(d, gc, 1, LineSolid, CapRound, JoinRound);
 }
 
 void

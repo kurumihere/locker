@@ -23,7 +23,7 @@ int x11_next_event(XEvent *ev);
 void x11_lock_layout(void);
 void x11_restore_layout(void);
 
-void x11_draw_indicator(Window win, XftDraw *draw, int count);
+void x11_draw_indicator(Drawable pm, int count, const char *state);
 void x11_draw_message(Window win, XftDraw *draw, const char *msg);
 int x11_run(int blur_radius, double darken, const char *bg_color);
 
