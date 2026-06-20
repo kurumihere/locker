@@ -1,4 +1,4 @@
-#define _POSIX_C_SOURCE 199309L
+#define _POSIX_C_SOURCE 200809L
 #include "x11.h"
 #include "pam_auth.h"
 #include "util.h"
@@ -8,12 +8,14 @@
 #include <X11/extensions/dpms.h>
 #include <X11/extensions/scrnsaver.h>
 #include <X11/keysym.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/select.h>
 #include <time.h>
+#include <unistd.h>
 
 static Display *d = NULL;
 static int screen;
@@ -289,6 +291,24 @@ x11_restore_layout(void)
         old_kb_group = -1;
 }
 
+struct auth_task {
+	char username[256];
+	char password[256];
+	int write_fd;
+};
+
+static void *
+auth_thread_func(void *arg)
+{
+	struct auth_task *task = arg;
+	int ok = locker_pam_auth(task->username, task->password);
+	secure_zero(task->password, sizeof(task->password));
+	ssize_t written = write(task->write_fd, &ok, sizeof(ok));
+	(void)written;
+	free(task);
+	return NULL;
+}
+
 int
 x11_run(int blur_radius, double darken, const char *bg_color)
 {
@@ -346,6 +366,17 @@ x11_run(int blur_radius, double darken, const char *bg_color)
         int pos = 0;
         password[0] = '\0';
 
+        int auth_pipe[2];
+        if (pipe(auth_pipe) != 0) {
+                fprintf(stderr, "x11: failed to create auth pipe\n");
+                x11_ungrab_input();
+                x11_restore_layout();
+                x11_destroy_image(img);
+                x11_cleanup();
+                return 1;
+        }
+        int auth_in_progress = 0;
+
         x11_draw_message(win, draw, "Enter password:");
         x11_draw_indicator(win, draw, 0);
 
@@ -363,14 +394,30 @@ x11_run(int blur_radius, double darken, const char *bg_color)
                         fd_set fds;
                         FD_ZERO(&fds);
                         FD_SET(xfd, &fds);
+                        FD_SET(auth_pipe[0], &fds);
+                        int max_fd = xfd > auth_pipe[0] ? xfd : auth_pipe[0];
                         struct timeval tv = {10, 0};
 
-                        int r = select(xfd + 1, &fds, NULL, NULL, &tv);
+                        int r = select(max_fd + 1, &fds, NULL, NULL, &tv);
                         if (r == 0 && has_dpms && !screen_off) {
                                 DPMSForceLevel(d, DPMSModeOff);
                                 XSync(d, False);
                                 screen_off = 1;
                         }
+
+                        if (r > 0 && FD_ISSET(auth_pipe[0], &fds)) {
+                                int auth_result = -1;
+                                if (read(auth_pipe[0], &auth_result, sizeof(auth_result)) == sizeof(auth_result)) {
+                                        auth_in_progress = 0;
+                                        if (auth_result == 0) {
+                                                break;
+                                        }
+                                        x11_show_image(win, img);
+                                        x11_draw_message(win, draw, "Wrong password");
+                                        x11_draw_indicator(win, draw, 0);
+                                }
+                        }
+
                         if (XPending(d) == 0)
                                 continue;
                 }
@@ -385,12 +432,19 @@ x11_run(int blur_radius, double darken, const char *bg_color)
                 }
                 if (ev.type == Expose) {
                         x11_show_image(win, img);
-                        x11_draw_message(win, draw, "Enter password:");
-                        x11_draw_indicator(win, draw, pos);
+                        if (auth_in_progress) {
+                                x11_draw_message(win, draw, "Authenticating...");
+                        } else {
+                                x11_draw_message(win, draw, "Enter password:");
+                                x11_draw_indicator(win, draw, pos);
+                        }
                         continue;
                 }
 
                 if (ev.type != KeyPress)
+                        continue;
+
+                if (auth_in_progress)
                         continue;
 
                 char buf[32] = {0};
@@ -405,17 +459,41 @@ x11_run(int blur_radius, double darken, const char *bg_color)
                                 continue;
                         }
 
-                        int ok = locker_pam_auth(username, password);
+                        struct auth_task *task = malloc(sizeof(struct auth_task));
+                        if (task) {
+                                snprintf(task->username, sizeof(task->username), "%s", username);
+                                snprintf(task->password, sizeof(task->password), "%s", password);
+                                task->write_fd = auth_pipe[1];
+
+                                auth_in_progress = 1;
+                                x11_show_image(win, img);
+                                x11_draw_message(win, draw, "Authenticating...");
+                                XFlush(d);
+
+                                pthread_t thread;
+                                if (pthread_create(&thread, NULL, auth_thread_func, task) == 0) {
+                                        pthread_detach(thread);
+                                } else {
+                                        int ok = locker_pam_auth(username, password);
+                                        auth_in_progress = 0;
+                                        if (ok == 0)
+                                                break;
+                                        x11_show_image(win, img);
+                                        x11_draw_message(win, draw, "Wrong password");
+                                        x11_draw_indicator(win, draw, 0);
+                                        free(task);
+                                }
+                        } else {
+                                int ok = locker_pam_auth(username, password);
+                                if (ok == 0)
+                                        break;
+                                x11_show_image(win, img);
+                                x11_draw_message(win, draw, "Wrong password");
+                                x11_draw_indicator(win, draw, 0);
+                        }
 
                         secure_zero(password, sizeof(password));
                         pos = 0;
-
-                        if (ok == 0)
-                                break;
-
-                        x11_show_image(win, img);
-                        x11_draw_message(win, draw, "Wrong password");
-                        x11_draw_indicator(win, draw, 0);
 
                 } else if (ks == XK_Escape) {
                         secure_zero(password, sizeof(password));
@@ -452,6 +530,9 @@ x11_run(int blur_radius, double darken, const char *bg_color)
                         }
                 }
         }
+
+        close(auth_pipe[0]);
+        close(auth_pipe[1]);
 
         if (draw)
                 XftDrawDestroy(draw);
