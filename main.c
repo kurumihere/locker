@@ -51,9 +51,17 @@ main(int argc, char **argv)
         int ch;
         while ((ch = getopt(argc, argv, "b:d:c:i:hB")) != -1) {
                 switch (ch) {
-                case 'b':
-                        blur_radius = atoi(optarg);
+                case 'b': {
+                        char *end;
+                        long val = strtol(optarg, &end, 10);
+                        if (*end != '\0' || val < 0 || val > 100) {
+                                fprintf(stderr, "invalid blur radius: %s\n",
+                                        optarg);
+                                return 1;
+                        }
+                        blur_radius = (int)val;
                         break;
+                }
                 case 'd': {
                         char *end;
                         darken = strtod(optarg, &end);
