@@ -1,3 +1,10 @@
+/* SPDX-License-Identifier: BSD-2-Clause
+ *
+ * Copyright (c) 2026, kurumi
+ *
+ * See LICENSE for details.
+ */
+
 #define _POSIX_C_SOURCE 200809L
 #include "x11.h"
 #include "pam_auth.h"
@@ -297,11 +304,10 @@ x11_draw_indicator(Drawable pm, int count, const char *state, IndicatorType ind_
         int cy = win_h / 2 + 40;
 
         if (ind_type == INDICATOR_DOTS) {
-                int r = 6;           /* Radius of each dot */
-                int spacing = 20;    /* Center-to-center distance */
+                int r = 6;
+                int spacing = 20;
 
                 if (strcmp(state, "wrong") == 0) {
-                        /* Draw 5 filled red dots */
                         int n = 5;
                         int start_x = cx - ((n - 1) * spacing) / 2;
                         XSetForeground(d, gc, color_ring_err);
@@ -309,15 +315,13 @@ x11_draw_indicator(Drawable pm, int count, const char *state, IndicatorType ind_
                                 XFillArc(d, pm, gc, start_x + i * spacing - r, cy - r, 2 * r, 2 * r, 0, 360 * 64);
                         }
                 } else if (strcmp(state, "checking") == 0) {
-                        /* Draw 5 filled blue dots */
-                        int n = 5;
+                        int n = count + 1;
                         int start_x = cx - ((n - 1) * spacing) / 2;
                         XSetForeground(d, gc, color_ring_auth);
                         for (int i = 0; i < n; i++) {
                                 XFillArc(d, pm, gc, start_x + i * spacing - r, cy - r, 2 * r, 2 * r, 0, 360 * 64);
                         }
                 } else if (count == 0) {
-                        /* Draw 5 hollow gray dots */
                         int n = 5;
                         int start_x = cx - ((n - 1) * spacing) / 2;
                         XSetLineAttributes(d, gc, 2, LineSolid, CapRound, JoinRound);
@@ -327,7 +331,6 @@ x11_draw_indicator(Drawable pm, int count, const char *state, IndicatorType ind_
                         }
                         XSetLineAttributes(d, gc, 1, LineSolid, CapRound, JoinRound);
                 } else {
-                        /* Draw 'count' filled cyan dots */
                         int start_x = cx - ((count - 1) * spacing) / 2;
                         XSetForeground(d, gc, color_ring_active);
                         for (int i = 0; i < count; i++) {
@@ -337,16 +340,13 @@ x11_draw_indicator(Drawable pm, int count, const char *state, IndicatorType ind_
         } else {
                 int r = 30;
 
-                /* 1. Draw inner filled circle (background) */
                 XSetForeground(d, gc, color_bg);
                 XFillArc(d, pm, gc, cx - r, cy - r, 2 * r, 2 * r, 0, 360 * 64);
 
-                /* 2. Draw base outer ring */
                 XSetLineAttributes(d, gc, 3, LineSolid, CapRound, JoinRound);
                 XSetForeground(d, gc, color_ring_idle);
                 XDrawArc(d, pm, gc, cx - r, cy - r, 2 * r, 2 * r, 0, 360 * 64);
 
-                /* 3. Draw active state elements */
                 if (strcmp(state, "wrong") == 0) {
                         XSetForeground(d, gc, color_ring_err);
                         XDrawArc(d, pm, gc, cx - r, cy - r, 2 * r, 2 * r, 0, 360 * 64);
@@ -480,6 +480,7 @@ x11_run(int blur_radius, double darken, const char *bg_color, IndicatorType ind_
                 return 1;
         }
         int auth_in_progress = 0;
+        int auth_dots_count = 0;
 
         x11_redraw(win, img, "Enter password:", 0, bg_pixel, ind_type);
 
@@ -512,6 +513,7 @@ x11_run(int blur_radius, double darken, const char *bg_color, IndicatorType ind_
                                 int auth_result = -1;
                                 if (read(auth_pipe[0], &auth_result, sizeof(auth_result)) == sizeof(auth_result)) {
                                         auth_in_progress = 0;
+                                        auth_dots_count = 0;
                                         if (auth_result == 0) {
                                                 break;
                                         }
@@ -533,7 +535,7 @@ x11_run(int blur_radius, double darken, const char *bg_color, IndicatorType ind_
                 }
                 if (ev.type == Expose) {
                         if (auth_in_progress) {
-                                x11_redraw(win, img, "Authenticating...", -1, bg_pixel, ind_type);
+                                x11_redraw(win, img, "Authenticating...", auth_dots_count, bg_pixel, ind_type);
                         } else {
                                 x11_redraw(win, img, "Enter password:", pos, bg_pixel, ind_type);
                         }
@@ -556,6 +558,7 @@ x11_run(int blur_radius, double darken, const char *bg_color, IndicatorType ind_
                                 continue;
                         }
 
+                        auth_dots_count = pos;
                         struct auth_task *task = malloc(sizeof(struct auth_task));
                         if (task) {
                                 snprintf(task->username, sizeof(task->username), "%s", username);
@@ -563,7 +566,7 @@ x11_run(int blur_radius, double darken, const char *bg_color, IndicatorType ind_
                                 task->write_fd = auth_pipe[1];
 
                                 auth_in_progress = 1;
-                                x11_redraw(win, img, "Authenticating...", -1, bg_pixel, ind_type);
+                                x11_redraw(win, img, "Authenticating...", auth_dots_count, bg_pixel, ind_type);
                                 XFlush(d);
 
                                 pthread_t thread;
@@ -572,6 +575,7 @@ x11_run(int blur_radius, double darken, const char *bg_color, IndicatorType ind_
                                 } else {
                                         int ok = locker_pam_auth(username, password);
                                         auth_in_progress = 0;
+                                        auth_dots_count = 0;
                                         if (ok == 0)
                                                 break;
                                         x11_redraw(win, img, "Wrong password", 0, bg_pixel, ind_type);

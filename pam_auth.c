@@ -1,3 +1,10 @@
+/* SPDX-License-Identifier: BSD-2-Clause
+ *
+ * Copyright (c) 2026, kurumi
+ *
+ * See LICENSE for details.
+ */
+
 #define _POSIX_C_SOURCE 200809L
 #include "pam_auth.h"
 #include <security/pam_appl.h>

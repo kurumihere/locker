@@ -1,3 +1,10 @@
+/* SPDX-License-Identifier: BSD-2-Clause
+ *
+ * Copyright (c) 2026, kurumi
+ *
+ * See LICENSE for details.
+ */
+
 #define _POSIX_C_SOURCE 200809L
 #include "backend.h"
 #include <fcntl.h>
@@ -77,19 +84,16 @@ main(int argc, char **argv)
                         return 1;
                 }
                 if (pid > 0) {
-                        /* parent exits */
                         return 0;
                 }
-                /* child: become session leader */
                 setsid();
 
-                /* close std fds, nobody needs them */
                 close(0);
                 close(1);
                 close(2);
-                open("/dev/null", O_RDONLY); /* stdin */
-                open("/dev/null", O_WRONLY); /* stdout */
-                open("/dev/null", O_WRONLY); /* stderr */
+                open("/dev/null", O_RDONLY);
+                open("/dev/null", O_WRONLY);
+                open("/dev/null", O_WRONLY);
 
                 struct sigaction sa;
                 sa.sa_handler = sigusr1_handler;
@@ -97,7 +101,6 @@ main(int argc, char **argv)
                 sa.sa_flags = 0;
                 sigaction(SIGUSR1, &sa, NULL);
 
-                /* ignore SIGCHLD to avoid zombies */
                 sa.sa_handler = SIG_IGN;
                 sigaction(SIGCHLD, &sa, NULL);
 
