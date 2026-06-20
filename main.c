@@ -3,8 +3,8 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
-#include <time.h>
 #include <stdlib.h>
+#include <time.h>
 #include <unistd.h>
 
 static volatile sig_atomic_t want_lock = 0;
@@ -77,9 +77,9 @@ main(int argc, char **argv)
                 close(0);
                 close(1);
                 close(2);
-                open("/dev/null", O_RDONLY);  /* stdin */
-                open("/dev/null", O_WRONLY);  /* stdout */
-                open("/dev/null", O_WRONLY);  /* stderr */
+                open("/dev/null", O_RDONLY); /* stdin */
+                open("/dev/null", O_WRONLY); /* stdout */
+                open("/dev/null", O_WRONLY); /* stderr */
 
                 struct sigaction sa;
                 sa.sa_handler = sigusr1_handler;

@@ -6,9 +6,9 @@
 #include <X11/Xutil.h>
 #include <X11/extensions/scrnsaver.h>
 #include <X11/keysym.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
 #include <string.h>
 #include <time.h>
 
@@ -117,7 +117,7 @@ x11_blur_image(XImage *img, int radius)
                                 b += p & 0xFF;
                         }
                         data[y * w + x] = (0xFFUL << 24) | ((r / n) << 16) |
-                                         ((g / n) << 8) | (b / n);
+                                          ((g / n) << 8) | (b / n);
                 }
         }
 
@@ -195,16 +195,18 @@ int
 x11_grab_input(Window win)
 {
         while (1) {
-                if (XGrabKeyboard(d, win, True, GrabModeAsync,
-                                  GrabModeAsync, CurrentTime) == GrabSuccess)
+                if (XGrabKeyboard(d, win, True, GrabModeAsync, GrabModeAsync,
+                                  CurrentTime) == GrabSuccess)
                         break;
                 struct timespec ts = {0, 50000000L};
                 nanosleep(&ts, NULL);
         }
 
         while (XGrabPointer(d, win, True,
-                     ButtonPressMask | ButtonReleaseMask | PointerMotionMask,
-                     GrabModeAsync, GrabModeAsync, win, None, CurrentTime) != GrabSuccess) {
+                            ButtonPressMask | ButtonReleaseMask |
+                                PointerMotionMask,
+                            GrabModeAsync, GrabModeAsync, win, None,
+                            CurrentTime) != GrabSuccess) {
                 struct timespec ts = {0, 50000000L};
                 nanosleep(&ts, NULL);
         }
