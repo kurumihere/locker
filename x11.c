@@ -220,9 +220,11 @@ x11_create_window(unsigned long bg_pixel)
 }
 
 void
-x11_redraw(Window win, XImage *img, const char *msg, int pos, unsigned long bg_pixel, IndicatorType ind_type)
+x11_redraw(Window win, XImage *img, const char *msg, int pos,
+           unsigned long bg_pixel, IndicatorType ind_type)
 {
-        Pixmap pm = XCreatePixmap(d, win, win_w, win_h, DefaultDepth(d, screen));
+        Pixmap pm =
+            XCreatePixmap(d, win, win_w, win_h, DefaultDepth(d, screen));
         if (!pm)
                 return;
 
@@ -312,7 +314,8 @@ x11_next_event(XEvent *ev)
 }
 
 void
-x11_draw_indicator(Drawable pm, int count, const char *state, IndicatorType ind_type)
+x11_draw_indicator(Drawable pm, int count, const char *state,
+                   IndicatorType ind_type)
 {
         int cx = win_w / 2;
         int cy = win_h / 2 + 40;
@@ -326,29 +329,35 @@ x11_draw_indicator(Drawable pm, int count, const char *state, IndicatorType ind_
                         int start_x = cx - ((n - 1) * spacing) / 2;
                         XSetForeground(d, gc, color_ring_err);
                         for (int i = 0; i < n; i++) {
-                                XFillArc(d, pm, gc, start_x + i * spacing - r, cy - r, 2 * r, 2 * r, 0, 360 * 64);
+                                XFillArc(d, pm, gc, start_x + i * spacing - r,
+                                         cy - r, 2 * r, 2 * r, 0, 360 * 64);
                         }
                 } else if (strcmp(state, "checking") == 0) {
                         int n = count;
                         int start_x = cx - ((n - 1) * spacing) / 2;
                         XSetForeground(d, gc, color_ring_auth);
                         for (int i = 0; i < n; i++) {
-                                XFillArc(d, pm, gc, start_x + i * spacing - r, cy - r, 2 * r, 2 * r, 0, 360 * 64);
+                                XFillArc(d, pm, gc, start_x + i * spacing - r,
+                                         cy - r, 2 * r, 2 * r, 0, 360 * 64);
                         }
                 } else if (count == 0) {
                         int n = 5;
                         int start_x = cx - ((n - 1) * spacing) / 2;
-                        XSetLineAttributes(d, gc, 2, LineSolid, CapRound, JoinRound);
+                        XSetLineAttributes(d, gc, 2, LineSolid, CapRound,
+                                           JoinRound);
                         XSetForeground(d, gc, color_ring_idle);
                         for (int i = 0; i < n; i++) {
-                                XDrawArc(d, pm, gc, start_x + i * spacing - r, cy - r, 2 * r, 2 * r, 0, 360 * 64);
+                                XDrawArc(d, pm, gc, start_x + i * spacing - r,
+                                         cy - r, 2 * r, 2 * r, 0, 360 * 64);
                         }
-                        XSetLineAttributes(d, gc, 1, LineSolid, CapRound, JoinRound);
+                        XSetLineAttributes(d, gc, 1, LineSolid, CapRound,
+                                           JoinRound);
                 } else {
                         int start_x = cx - ((count - 1) * spacing) / 2;
                         XSetForeground(d, gc, color_ring_active);
                         for (int i = 0; i < count; i++) {
-                                XFillArc(d, pm, gc, start_x + i * spacing - r, cy - r, 2 * r, 2 * r, 0, 360 * 64);
+                                XFillArc(d, pm, gc, start_x + i * spacing - r,
+                                         cy - r, 2 * r, 2 * r, 0, 360 * 64);
                         }
                 }
         } else {
@@ -363,15 +372,18 @@ x11_draw_indicator(Drawable pm, int count, const char *state, IndicatorType ind_
 
                 if (strcmp(state, "wrong") == 0) {
                         XSetForeground(d, gc, color_ring_err);
-                        XDrawArc(d, pm, gc, cx - r, cy - r, 2 * r, 2 * r, 0, 360 * 64);
+                        XDrawArc(d, pm, gc, cx - r, cy - r, 2 * r, 2 * r, 0,
+                                 360 * 64);
                 } else if (strcmp(state, "checking") == 0) {
                         XSetForeground(d, gc, color_ring_auth);
-                        XDrawArc(d, pm, gc, cx - r, cy - r, 2 * r, 2 * r, 45 * 64, 270 * 64);
+                        XDrawArc(d, pm, gc, cx - r, cy - r, 2 * r, 2 * r,
+                                 45 * 64, 270 * 64);
                 } else if (count > 0) {
                         XSetForeground(d, gc, color_ring_active);
                         int start_angle = 90 * 64;
                         int travel = -(count * 30) * 64;
-                        XDrawArc(d, pm, gc, cx - r, cy - r, 2 * r, 2 * r, start_angle, travel);
+                        XDrawArc(d, pm, gc, cx - r, cy - r, 2 * r, 2 * r,
+                                 start_angle, travel);
                         XFillArc(d, pm, gc, cx - 4, cy - 4, 8, 8, 0, 360 * 64);
                 }
 
@@ -430,7 +442,8 @@ auth_thread_func(void *arg)
 }
 
 int
-x11_run(int blur_radius, double darken, const char *bg_color, IndicatorType ind_type)
+x11_run(int blur_radius, double darken, const char *bg_color,
+        IndicatorType ind_type)
 {
         if (x11_init() != 0)
                 return 1;
@@ -534,13 +547,17 @@ x11_run(int blur_radius, double darken, const char *bg_color, IndicatorType ind_
 
                         if (r > 0 && FD_ISSET(auth_pipe[0], &fds)) {
                                 int auth_result = -1;
-                                if (read(auth_pipe[0], &auth_result, sizeof(auth_result)) == sizeof(auth_result)) {
+                                if (read(auth_pipe[0], &auth_result,
+                                         sizeof(auth_result)) ==
+                                    sizeof(auth_result)) {
                                         auth_in_progress = 0;
                                         if (auth_result == 0) {
                                                 auth_dots_count = 0;
                                                 break;
                                         }
-                                        x11_redraw(win, img, "Wrong password", auth_dots_count, bg_pixel, ind_type);
+                                        x11_redraw(win, img, "Wrong password",
+                                                   auth_dots_count, bg_pixel,
+                                                   ind_type);
                                         auth_dots_count = 0;
                                 }
                         }
@@ -559,9 +576,11 @@ x11_run(int blur_radius, double darken, const char *bg_color, IndicatorType ind_
                 }
                 if (ev.type == Expose) {
                         if (auth_in_progress) {
-                                x11_redraw(win, img, "Authenticating...", auth_dots_count, bg_pixel, ind_type);
+                                x11_redraw(win, img, "Authenticating...",
+                                           auth_dots_count, bg_pixel, ind_type);
                         } else {
-                                x11_redraw(win, img, "Enter password:", pos, bg_pixel, ind_type);
+                                x11_redraw(win, img, "Enter password:", pos,
+                                           bg_pixel, ind_type);
                         }
                         continue;
                 }
@@ -578,41 +597,53 @@ x11_run(int blur_radius, double darken, const char *bg_color, IndicatorType ind_
 
                 if (ks == XK_Return) {
                         if (password[0] == '\0') {
-                                x11_redraw(win, img, "Enter password:", 0, bg_pixel, ind_type);
+                                x11_redraw(win, img, "Enter password:", 0,
+                                           bg_pixel, ind_type);
                                 continue;
                         }
 
                         auth_dots_count = pos;
-                        struct auth_task *task = malloc(sizeof(struct auth_task));
+                        struct auth_task *task =
+                            malloc(sizeof(struct auth_task));
                         if (task) {
-                                snprintf(task->username, sizeof(task->username), "%s", username);
-                                snprintf(task->password, sizeof(task->password), "%s", password);
+                                snprintf(task->username, sizeof(task->username),
+                                         "%s", username);
+                                snprintf(task->password, sizeof(task->password),
+                                         "%s", password);
                                 task->write_fd = auth_pipe[1];
 
                                 auth_in_progress = 1;
-                                x11_redraw(win, img, "Authenticating...", auth_dots_count, bg_pixel, ind_type);
+                                x11_redraw(win, img, "Authenticating...",
+                                           auth_dots_count, bg_pixel, ind_type);
                                 XFlush(d);
 
                                 pthread_t thread;
-                                if (pthread_create(&thread, NULL, auth_thread_func, task) == 0) {
+                                if (pthread_create(&thread, NULL,
+                                                   auth_thread_func,
+                                                   task) == 0) {
                                         pthread_detach(thread);
                                 } else {
-                                        int ok = locker_pam_auth(username, password);
+                                        int ok =
+                                            locker_pam_auth(username, password);
                                         auth_in_progress = 0;
-                                        secure_zero(task->password, sizeof(task->password));
+                                        secure_zero(task->password,
+                                                    sizeof(task->password));
                                         free(task);
                                         if (ok == 0) {
                                                 auth_dots_count = 0;
                                                 break;
                                         }
-                                        x11_redraw(win, img, "Wrong password", auth_dots_count, bg_pixel, ind_type);
+                                        x11_redraw(win, img, "Wrong password",
+                                                   auth_dots_count, bg_pixel,
+                                                   ind_type);
                                         auth_dots_count = 0;
                                 }
                         } else {
                                 int ok = locker_pam_auth(username, password);
                                 if (ok == 0)
                                         break;
-                                x11_redraw(win, img, "Wrong password", pos, bg_pixel, ind_type);
+                                x11_redraw(win, img, "Wrong password", pos,
+                                           bg_pixel, ind_type);
                         }
 
                         secure_zero(password, sizeof(password));
@@ -621,13 +652,15 @@ x11_run(int blur_radius, double darken, const char *bg_color, IndicatorType ind_
                 } else if (ks == XK_Escape) {
                         secure_zero(password, sizeof(password));
                         pos = 0;
-                        x11_redraw(win, img, "Enter password:", 0, bg_pixel, ind_type);
+                        x11_redraw(win, img, "Enter password:", 0, bg_pixel,
+                                   ind_type);
 
                 } else if (ks == XK_BackSpace) {
                         if (pos > 0)
                                 password[--pos] = '\0';
 
-                        x11_redraw(win, img, "Enter password:", pos, bg_pixel, ind_type);
+                        x11_redraw(win, img, "Enter password:", pos, bg_pixel,
+                                   ind_type);
 
                 } else if (len > 0) {
                         int added = 0;
@@ -643,7 +676,8 @@ x11_run(int blur_radius, double darken, const char *bg_color, IndicatorType ind_
                         }
 
                         if (added) {
-                                x11_redraw(win, img, "Enter password:", pos, bg_pixel, ind_type);
+                                x11_redraw(win, img, "Enter password:", pos,
+                                           bg_pixel, ind_type);
                         }
                 }
         }

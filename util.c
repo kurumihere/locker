@@ -14,7 +14,8 @@ secure_zero(void *s, size_t n)
 {
         if (!s || n == 0)
                 return;
-#if defined(__GLIBC__) && (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 25))
+#if defined(__GLIBC__) &&                                                      \
+    (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 25))
         explicit_bzero(s, n);
 #elif defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
         explicit_bzero(s, n);

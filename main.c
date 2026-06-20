@@ -29,11 +29,14 @@ static void
 usage(const char *name)
 {
         fprintf(stderr,
-                "usage: %s [-b radius] [-d factor] [-c rrggbb] [-i type] [-B] [-h]\n"
+                "usage: %s [-b radius] [-d factor] [-c rrggbb] [-i type] [-B] "
+                "[-h]\n"
                 "  -b radius   blur radius (default: 3, 0 = off)\n"
-                "  -d factor   darken factor 0.0-1.0 (default: 0.3, 0 = off, 1.0 = black)\n"
+                "  -d factor   darken factor 0.0-1.0 (default: 0.3, 0 = off, "
+                "1.0 = black)\n"
                 "  -c rrggbb   solid background color instead of screenshot\n"
-                "  -i type     indicator type: 'circle' or 'dots' (default: circle)\n"
+                "  -i type     indicator type: 'circle' or 'dots' (default: "
+                "circle)\n"
                 "  -B          daemon mode, lock on SIGUSR1\n"
                 "  -h          show this help\n",
                 name);
@@ -125,7 +128,8 @@ main(int argc, char **argv)
                         if (want_lock && !locked) {
                                 locked = 1;
                                 want_lock = 0;
-                                x11_run(blur_radius, darken, bg_color, ind_type);
+                                x11_run(blur_radius, darken, bg_color,
+                                        ind_type);
                                 locked = 0;
                                 want_lock = 0;
                                 struct timespec ts = {0, 250000000L};
