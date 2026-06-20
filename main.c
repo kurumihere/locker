@@ -103,12 +103,14 @@ main(int argc, char **argv)
                 }
                 setsid();
 
-                close(0);
-                close(1);
-                close(2);
-                open("/dev/null", O_RDONLY);
-                open("/dev/null", O_WRONLY);
-                open("/dev/null", O_WRONLY);
+                int devnull = open("/dev/null", O_RDWR);
+                if (devnull >= 0) {
+                        dup2(devnull, 0);
+                        dup2(devnull, 1);
+                        dup2(devnull, 2);
+                        if (devnull > 2)
+                                close(devnull);
+                }
 
                 struct sigaction sa;
                 sa.sa_handler = sigusr1_handler;
