@@ -16,6 +16,7 @@
 #include <X11/extensions/scrnsaver.h>
 #include <X11/keysym.h>
 #include <pthread.h>
+#include <pwd.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -485,9 +486,9 @@ x11_run(int blur_radius, double darken, const char *bg_color, IndicatorType ind_
                 return 1;
         }
 
-        char *username = getenv("USER");
-        if (!username) {
-                fprintf(stderr, "x11: $USER not set\n");
+        struct passwd *pw = getpwuid(getuid());
+        if (!pw || !pw->pw_name) {
+                fprintf(stderr, "x11: cannot determine username\n");
                 close(auth_pipe[0]);
                 close(auth_pipe[1]);
                 x11_ungrab_input();
@@ -496,6 +497,7 @@ x11_run(int blur_radius, double darken, const char *bg_color, IndicatorType ind_
                 x11_cleanup();
                 return 1;
         }
+        const char *username = pw->pw_name;
 
         char password[256];
         int pos = 0;
