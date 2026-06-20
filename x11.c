@@ -127,7 +127,7 @@ x11_blur_image(XImage *img, int radius)
 
         int w = img->width, h = img->height;
         uint32_t *data = (uint32_t *)img->data;
-        uint32_t *tmp = malloc(w * h * sizeof(uint32_t));
+        uint32_t *tmp = malloc((size_t)w * h * sizeof(uint32_t));
         if (!tmp)
                 return;
 
