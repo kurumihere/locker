@@ -7,14 +7,6 @@
 
 #include "util.h"
 
-void
-secure_zero(void *s, size_t n)
-{
-        volatile unsigned char *p = s;
-        while (n--)
-                *p++ = 0;
-}
-
 int
 parse_hex(const char *s, unsigned long *out)
 {
