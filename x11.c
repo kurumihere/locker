@@ -646,6 +646,7 @@ x11_run(int blur_radius, double darken, const char *bg_color, IndicatorType ind_
                 }
         }
 
+        secure_zero(password, sizeof(password));
         close(auth_pipe[0]);
         close(auth_pipe[1]);
 
