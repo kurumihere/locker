@@ -31,7 +31,7 @@ usage(const char *name)
         fprintf(stderr,
                 "usage: %s [-b radius] [-d factor] [-c rrggbb] [-i type] [-B] [-h]\n"
                 "  -b radius   blur radius (default: 3, 0 = off)\n"
-                "  -d factor   darken factor 0.0-1.0 (default: 0.3, 0 = off)\n"
+                "  -d factor   darken factor 0.0-1.0 (default: 0.3, 0 = off, 1.0 = black)\n"
                 "  -c rrggbb   solid background color instead of screenshot\n"
                 "  -i type     indicator type: 'circle' or 'dots' (default: circle)\n"
                 "  -B          daemon mode, lock on SIGUSR1\n"
@@ -54,9 +54,16 @@ main(int argc, char **argv)
                 case 'b':
                         blur_radius = atoi(optarg);
                         break;
-                case 'd':
-                        darken = atof(optarg);
+                case 'd': {
+                        char *end;
+                        darken = strtod(optarg, &end);
+                        if (*end != '\0' || darken < 0.0 || darken > 1.0) {
+                                fprintf(stderr, "invalid darken factor: %s\n",
+                                        optarg);
+                                return 1;
+                        }
                         break;
+                }
                 case 'c':
                         bg_color = optarg;
                         break;

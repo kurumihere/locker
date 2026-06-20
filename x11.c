@@ -171,8 +171,11 @@ x11_blur_image(XImage *img, int radius)
 void
 x11_darken_image(XImage *img, double factor)
 {
-        if (img->bits_per_pixel != 32)
+        if (img->bits_per_pixel != 32 || factor <= 0.0)
                 return;
+        double brightness = 1.0 - factor;
+        if (brightness < 0.0)
+                brightness = 0.0;
         uint32_t *data = (uint32_t *)img->data;
         for (int y = 0; y < img->height; y++) {
                 for (int x = 0; x < img->width; x++) {
@@ -181,9 +184,9 @@ x11_darken_image(XImage *img, double factor)
                         unsigned char g = (p >> 8) & 0xFF;
                         unsigned char b = (p) & 0xFF;
                         p = (0xFFUL << 24) |
-                            ((unsigned char)(r * factor) << 16) |
-                            ((unsigned char)(g * factor) << 8) |
-                            (unsigned char)(b * factor);
+                            ((unsigned char)(r * brightness) << 16) |
+                            ((unsigned char)(g * brightness) << 8) |
+                            (unsigned char)(b * brightness);
                         data[y * img->width + x] = p;
                 }
         }
