@@ -595,13 +595,14 @@ x11_run(int blur_radius, double darken, const char *bg_color, IndicatorType ind_
                                 } else {
                                         int ok = locker_pam_auth(username, password);
                                         auth_in_progress = 0;
+                                        secure_zero(task->password, sizeof(task->password));
+                                        free(task);
                                         if (ok == 0) {
                                                 auth_dots_count = 0;
                                                 break;
                                         }
                                         x11_redraw(win, img, "Wrong password", auth_dots_count, bg_pixel, ind_type);
                                         auth_dots_count = 0;
-                                        free(task);
                                 }
                         } else {
                                 int ok = locker_pam_auth(username, password);
