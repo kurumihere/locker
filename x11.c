@@ -411,21 +411,21 @@ x11_restore_layout(void)
 }
 
 struct auth_task {
-	char username[256];
-	char password[256];
-	int write_fd;
+        char username[256];
+        char password[256];
+        int write_fd;
 };
 
 static void *
 auth_thread_func(void *arg)
 {
-	struct auth_task *task = arg;
-	int ok = locker_pam_auth(task->username, task->password);
-	secure_zero(task->password, sizeof(task->password));
-	ssize_t written = write(task->write_fd, &ok, sizeof(ok));
-	(void)written;
-	free(task);
-	return NULL;
+        struct auth_task *task = arg;
+        int ok = locker_pam_auth(task->username, task->password);
+        secure_zero(task->password, sizeof(task->password));
+        ssize_t written = write(task->write_fd, &ok, sizeof(ok));
+        (void)written;
+        free(task);
+        return NULL;
 }
 
 int
