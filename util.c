@@ -36,7 +36,11 @@ parse_hex(const char *s, unsigned long *out)
         if (!s || !s[0])
                 return -1;
 
-        if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) {
+        if (s[0] == '#') {
+                s++;
+                if (!s[0])
+                        return -1;
+        } else if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) {
                 s += 2;
                 if (!s[0])
                         return -1;
