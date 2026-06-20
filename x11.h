@@ -1,6 +1,7 @@
 #ifndef LOCKER_X11_H
 #define LOCKER_X11_H
 
+#include <X11/Xft/Xft.h>
 #include <X11/Xlib.h>
 
 int x11_init(void);
@@ -22,8 +23,8 @@ int x11_next_event(XEvent *ev);
 void x11_lock_layout(void);
 void x11_restore_layout(void);
 
-void x11_draw_indicator(Window win, int count);
-void x11_draw_message(Window win, const char *msg);
+void x11_draw_indicator(Window win, XftDraw *draw, int count);
+void x11_draw_message(Window win, XftDraw *draw, const char *msg);
 int x11_run(int blur_radius, double darken, const char *bg_color);
 
 #endif

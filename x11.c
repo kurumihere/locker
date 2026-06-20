@@ -3,6 +3,7 @@
 #include "pam_auth.h"
 #include "util.h"
 #include <X11/XKBlib.h>
+#include <X11/Xft/Xft.h>
 #include <X11/Xutil.h>
 #include <X11/extensions/scrnsaver.h>
 #include <X11/keysym.h>
@@ -17,7 +18,8 @@ static int screen;
 static Window root;
 static GC gc;
 static int win_w, win_h;
-static XFontStruct *font = NULL;
+static XftFont *font = NULL;
+static XftColor color;
 static int old_kb_group = -1;
 
 int
@@ -42,14 +44,19 @@ x11_init(void)
                 return -1;
         }
 
-        font = XLoadQueryFont(d, "fixed");
+        font = XftFontOpenName(d, screen, "sans-serif:size=18");
         if (!font) {
-                fprintf(stderr, "x11: cannot load font 'fixed'\n");
-                XFreeGC(d, gc);
-                XCloseDisplay(d);
-                return -1;
+                font = XftFontOpenName(d, screen, "fixed");
+                if (!font) {
+                        fprintf(stderr, "x11: cannot load font\n");
+                        XFreeGC(d, gc);
+                        XCloseDisplay(d);
+                        return -1;
+                }
         }
-        XSetFont(d, gc, font->fid);
+        XRenderColor xrcolor = {0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF};
+        XftColorAllocValue(d, DefaultVisual(d, screen),
+                           DefaultColormap(d, screen), &xrcolor, &color);
 
         unsigned long white = WhitePixel(d, screen);
         XSetForeground(d, gc, white);
@@ -62,8 +69,11 @@ x11_cleanup(void)
 {
         if (!d)
                 return;
-        if (font)
-                XFreeFont(d, font);
+        if (font) {
+                XftColorFree(d, DefaultVisual(d, screen),
+                             DefaultColormap(d, screen), &color);
+                XftFontClose(d, font);
+        }
         if (gc)
                 XFreeGC(d, gc);
         XCloseDisplay(d);
@@ -228,26 +238,35 @@ x11_next_event(XEvent *ev)
 }
 
 void
-x11_draw_indicator(Window win, int count)
+x11_draw_indicator(Window win, XftDraw *draw, int count)
 {
+        (void)win;
         int cx = win_w / 2;
-        int cy = win_h / 2;
-        int char_w = XTextWidth(font, "*", 1);
+        int cy = win_h / 2 + 20;
+        XGlyphInfo extents;
+        XftTextExtentsUtf8(d, font, (const FcChar8 *)"*", 1, &extents);
+        int char_w = extents.xOff;
         int total_w = count * char_w;
         int start_x = cx - total_w / 2;
 
         for (int i = 0; i < count; i++) {
-                XDrawString(d, win, gc, start_x + i * char_w, cy, "*", 1);
+                XftDrawStringUtf8(draw, &color, font, start_x + i * char_w, cy,
+                                  (const FcChar8 *)"*", 1);
         }
 }
 
 void
-x11_draw_message(Window win, const char *msg)
+x11_draw_message(Window win, XftDraw *draw, const char *msg)
 {
-        int w = XTextWidth(font, msg, strlen(msg));
+        (void)win;
+        XGlyphInfo extents;
+        XftTextExtentsUtf8(d, font, (const FcChar8 *)msg, strlen(msg),
+                           &extents);
+        int w = extents.xOff;
         int x = (win_w - w) / 2;
         int y = win_h / 2 - 20;
-        XDrawString(d, win, gc, x, y, msg, strlen(msg));
+        XftDrawStringUtf8(draw, &color, font, x, y, (const FcChar8 *)msg,
+                          strlen(msg));
 }
 
 void
@@ -299,6 +318,8 @@ x11_run(int blur_radius, double darken, const char *bg_color)
         }
 
         Window win = x11_create_window(bg_pixel);
+        XftDraw *draw = XftDrawCreate(d, win, DefaultVisual(d, screen),
+                                      DefaultColormap(d, screen));
         x11_show_image(win, img);
         x11_hide_cursor(win);
         XFlush(d);
@@ -323,15 +344,15 @@ x11_run(int blur_radius, double darken, const char *bg_color)
         int pos = 0;
         password[0] = '\0';
 
-        x11_draw_message(win, "Enter password:");
-        x11_draw_indicator(win, 0);
+        x11_draw_message(win, draw, "Enter password:");
+        x11_draw_indicator(win, draw, 0);
 
         XEvent ev;
         while (x11_next_event(&ev) == 0) {
                 if (ev.type == Expose) {
                         x11_show_image(win, img);
-                        x11_draw_message(win, "Enter password:");
-                        x11_draw_indicator(win, pos);
+                        x11_draw_message(win, draw, "Enter password:");
+                        x11_draw_indicator(win, draw, pos);
                         continue;
                 }
 
@@ -345,8 +366,8 @@ x11_run(int blur_radius, double darken, const char *bg_color)
                 if (ks == XK_Return) {
                         if (password[0] == '\0') {
                                 x11_show_image(win, img);
-                                x11_draw_message(win, "Enter password:");
-                                x11_draw_indicator(win, 0);
+                                x11_draw_message(win, draw, "Enter password:");
+                                x11_draw_indicator(win, draw, 0);
                                 continue;
                         }
 
@@ -359,23 +380,23 @@ x11_run(int blur_radius, double darken, const char *bg_color)
                                 break;
 
                         x11_show_image(win, img);
-                        x11_draw_message(win, "Wrong password");
-                        x11_draw_indicator(win, 0);
+                        x11_draw_message(win, draw, "Wrong password");
+                        x11_draw_indicator(win, draw, 0);
 
                 } else if (ks == XK_Escape) {
                         secure_zero(password, sizeof(password));
                         pos = 0;
                         x11_show_image(win, img);
-                        x11_draw_message(win, "Enter password:");
-                        x11_draw_indicator(win, 0);
+                        x11_draw_message(win, draw, "Enter password:");
+                        x11_draw_indicator(win, draw, 0);
 
                 } else if (ks == XK_BackSpace) {
                         if (pos > 0)
                                 password[--pos] = '\0';
 
                         x11_show_image(win, img);
-                        x11_draw_message(win, "Enter password:");
-                        x11_draw_indicator(win, pos);
+                        x11_draw_message(win, draw, "Enter password:");
+                        x11_draw_indicator(win, draw, pos);
 
                 } else if (len > 0) {
                         int added = 0;
@@ -392,12 +413,14 @@ x11_run(int blur_radius, double darken, const char *bg_color)
 
                         if (added) {
                                 x11_show_image(win, img);
-                                x11_draw_message(win, "Enter password:");
-                                x11_draw_indicator(win, pos);
+                                x11_draw_message(win, draw, "Enter password:");
+                                x11_draw_indicator(win, draw, pos);
                         }
                 }
         }
 
+        if (draw)
+                XftDrawDestroy(draw);
         x11_ungrab_input();
         x11_restore_layout();
         XScreenSaverSuspend(d, False);
