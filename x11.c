@@ -315,7 +315,7 @@ x11_draw_indicator(Drawable pm, int count, const char *state, IndicatorType ind_
                                 XFillArc(d, pm, gc, start_x + i * spacing - r, cy - r, 2 * r, 2 * r, 0, 360 * 64);
                         }
                 } else if (strcmp(state, "checking") == 0) {
-                        int n = count + 1;
+                        int n = count;
                         int start_x = cx - ((n - 1) * spacing) / 2;
                         XSetForeground(d, gc, color_ring_auth);
                         for (int i = 0; i < n; i++) {
