@@ -4,9 +4,11 @@
 #include "util.h"
 #include <X11/XKBlib.h>
 #include <X11/Xutil.h>
+#include <X11/extensions/scrnsaver.h>
 #include <X11/keysym.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <time.h>
 
@@ -76,21 +78,14 @@ x11_capture_screen(void)
 void
 x11_blur_image(XImage *img, int radius)
 {
-        if (radius < 1)
+        if (radius < 1 || img->bits_per_pixel != 32)
                 return;
 
         int w = img->width, h = img->height;
-        unsigned long *buf = malloc(w * h * sizeof(unsigned long));
-        unsigned long *tmp = malloc(w * h * sizeof(unsigned long));
-        if (!buf || !tmp) {
-                free(buf);
-                free(tmp);
+        uint32_t *data = (uint32_t *)img->data;
+        uint32_t *tmp = malloc(w * h * sizeof(uint32_t));
+        if (!tmp)
                 return;
-        }
-
-        for (int y = 0; y < h; y++)
-                for (int x = 0; x < w; x++)
-                        buf[y * w + x] = XGetPixel(img, x, y);
 
         for (int y = 0; y < h; y++) {
                 for (int x = 0; x < w; x++) {
@@ -99,7 +94,7 @@ x11_blur_image(XImage *img, int radius)
                         int n = e - s + 1;
                         unsigned long r = 0, g = 0, b = 0;
                         for (int k = s; k <= e; k++) {
-                                unsigned long p = buf[y * w + k];
+                                uint32_t p = data[y * w + k];
                                 r += (p >> 16) & 0xFF;
                                 g += (p >> 8) & 0xFF;
                                 b += p & 0xFF;
@@ -116,30 +111,28 @@ x11_blur_image(XImage *img, int radius)
                         int n = e - s + 1;
                         unsigned long r = 0, g = 0, b = 0;
                         for (int k = s; k <= e; k++) {
-                                unsigned long p = tmp[k * w + x];
+                                uint32_t p = tmp[k * w + x];
                                 r += (p >> 16) & 0xFF;
                                 g += (p >> 8) & 0xFF;
                                 b += p & 0xFF;
                         }
-                        buf[y * w + x] = (0xFFUL << 24) | ((r / n) << 16) |
+                        data[y * w + x] = (0xFFUL << 24) | ((r / n) << 16) |
                                          ((g / n) << 8) | (b / n);
                 }
         }
 
-        for (int y = 0; y < h; y++)
-                for (int x = 0; x < w; x++)
-                        XPutPixel(img, x, y, buf[y * w + x]);
-
-        free(buf);
         free(tmp);
 }
 
 void
 x11_darken_image(XImage *img, double factor)
 {
+        if (img->bits_per_pixel != 32)
+                return;
+        uint32_t *data = (uint32_t *)img->data;
         for (int y = 0; y < img->height; y++) {
                 for (int x = 0; x < img->width; x++) {
-                        unsigned long p = XGetPixel(img, x, y);
+                        uint32_t p = data[y * img->width + x];
                         unsigned char r = (p >> 16) & 0xFF;
                         unsigned char g = (p >> 8) & 0xFF;
                         unsigned char b = (p) & 0xFF;
@@ -147,22 +140,9 @@ x11_darken_image(XImage *img, double factor)
                             ((unsigned char)(r * factor) << 16) |
                             ((unsigned char)(g * factor) << 8) |
                             (unsigned char)(b * factor);
-                        XPutPixel(img, x, y, p);
+                        data[y * img->width + x] = p;
                 }
         }
-}
-
-XImage *
-x11_create_solid(unsigned long pixel)
-{
-        XImage *img =
-            XGetImage(d, root, 0, 0, win_w, win_h, AllPlanes, ZPixmap);
-        if (!img)
-                return NULL;
-        for (int y = 0; y < win_h; y++)
-                for (int x = 0; x < win_w; x++)
-                        XPutPixel(img, x, y, pixel);
-        return img;
 }
 
 void
@@ -173,11 +153,11 @@ x11_destroy_image(XImage *img)
 }
 
 Window
-x11_create_window(void)
+x11_create_window(unsigned long bg_pixel)
 {
         XSetWindowAttributes attrs;
         attrs.override_redirect = True;
-        attrs.background_pixel = 0;
+        attrs.background_pixel = bg_pixel;
         attrs.event_mask = KeyPressMask | ExposureMask;
 
         Window win = XCreateWindow(
@@ -194,7 +174,10 @@ x11_create_window(void)
 void
 x11_show_image(Window win, XImage *img)
 {
-        XPutImage(d, win, gc, img, 0, 0, 0, 0, win_w, win_h);
+        if (img)
+                XPutImage(d, win, gc, img, 0, 0, 0, 0, win_w, win_h);
+        else
+                XClearWindow(d, win);
 }
 
 void
@@ -211,27 +194,20 @@ x11_hide_cursor(Window win)
 int
 x11_grab_input(Window win)
 {
-        int grabbed = 0;
-        for (int i = 0; i < 10; i++) {
-                int r = XGrabKeyboard(d, win, True, GrabModeAsync,
-                                      GrabModeAsync, CurrentTime);
-                if (r == GrabSuccess) {
-                        grabbed = 1;
+        while (1) {
+                if (XGrabKeyboard(d, win, True, GrabModeAsync,
+                                  GrabModeAsync, CurrentTime) == GrabSuccess)
                         break;
-                }
                 struct timespec ts = {0, 50000000L};
                 nanosleep(&ts, NULL);
         }
-        if (!grabbed) {
-                fprintf(stderr, "x11: cannot grab keyboard\n");
-                return -1;
-        }
 
-        int pr = XGrabPointer(d, win, True,
+        while (XGrabPointer(d, win, True,
                      ButtonPressMask | ButtonReleaseMask | PointerMotionMask,
-                     GrabModeAsync, GrabModeAsync, win, None, CurrentTime);
-        if (pr != GrabSuccess)
-                fprintf(stderr, "x11: cannot grab pointer\n");
+                     GrabModeAsync, GrabModeAsync, win, None, CurrentTime) != GrabSuccess) {
+                struct timespec ts = {0, 50000000L};
+                nanosleep(&ts, NULL);
+        }
 
         return 0;
 }
@@ -297,6 +273,7 @@ x11_run(int blur_radius, double darken, const char *bg_color)
                 return 1;
 
         XImage *img = NULL;
+        unsigned long bg_pixel = 0;
 
         if (bg_color) {
                 unsigned long rgb;
@@ -305,11 +282,7 @@ x11_run(int blur_radius, double darken, const char *bg_color)
                         x11_cleanup();
                         return 1;
                 }
-                unsigned char r = (rgb >> 16) & 0xFF;
-                unsigned char g = (rgb >> 8) & 0xFF;
-                unsigned char b = rgb & 0xFF;
-                unsigned long pixel = (0xFFUL << 24) | (r << 16) | (g << 8) | b;
-                img = x11_create_solid(pixel);
+                bg_pixel = rgb;
         } else {
                 img = x11_capture_screen();
                 if (!img) {
@@ -323,24 +296,16 @@ x11_run(int blur_radius, double darken, const char *bg_color)
                         x11_darken_image(img, darken);
         }
 
-        if (!img) {
-                fprintf(stderr, "x11: failed to create image\n");
-                x11_cleanup();
-                return 1;
-        }
-
-        Window win = x11_create_window();
+        Window win = x11_create_window(bg_pixel);
         x11_show_image(win, img);
         x11_hide_cursor(win);
         XFlush(d);
 
-        if (x11_grab_input(win) != 0) {
-                x11_destroy_image(img);
-                x11_cleanup();
-                return 1;
-        }
+        x11_grab_input(win);
 
         x11_lock_layout();
+        XScreenSaverSuspend(d, True);
+        XFlush(d);
 
         char *username = getenv("USER");
         if (!username) {
@@ -373,7 +338,7 @@ x11_run(int blur_radius, double darken, const char *bg_color)
 
                 char buf[32] = {0};
                 KeySym ks;
-                XLookupString(&ev.xkey, buf, sizeof(buf), &ks, NULL);
+                int len = XLookupString(&ev.xkey, buf, sizeof(buf), &ks, NULL);
 
                 if (ks == XK_Return) {
                         if (password[0] == '\0') {
@@ -410,20 +375,30 @@ x11_run(int blur_radius, double darken, const char *bg_color)
                         x11_draw_message(win, "Enter password:");
                         x11_draw_indicator(win, pos);
 
-                } else if (buf[0] >= 32 && buf[0] < 127) {
-                        if (pos < (int)sizeof(password) - 1) {
-                                password[pos++] = buf[0];
-                                password[pos] = '\0';
+                } else if (len > 0) {
+                        int added = 0;
+                        for (int i = 0; i < len; i++) {
+                                unsigned char c = buf[i];
+                                if (c < 32 || c == 127)
+                                        continue;
+                                if (pos < (int)sizeof(password) - 1) {
+                                        password[pos++] = c;
+                                        password[pos] = '\0';
+                                        added = 1;
+                                }
                         }
 
-                        x11_show_image(win, img);
-                        x11_draw_message(win, "Enter password:");
-                        x11_draw_indicator(win, pos);
+                        if (added) {
+                                x11_show_image(win, img);
+                                x11_draw_message(win, "Enter password:");
+                                x11_draw_indicator(win, pos);
+                        }
                 }
         }
 
         x11_ungrab_input();
         x11_restore_layout();
+        XScreenSaverSuspend(d, False);
         x11_destroy_image(img);
         x11_cleanup();
         return 0;

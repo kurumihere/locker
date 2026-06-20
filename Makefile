@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -std=c99 -pedantic
-LDFLAGS = -lX11 -lpam
+LDFLAGS = -lX11 -lXss -lpam
 SRC = main.c x11.c pam_auth.c util.c
 OBJ = $(SRC:.c=.o)
 
