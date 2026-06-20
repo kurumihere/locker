@@ -4,7 +4,8 @@ minimal screen locker.
 
 ## Dependencies
 
-- libX11, libXext
+- libX11, libXext, libXss
+- libXft, fontconfig
 - pam
 
 ## Usage
