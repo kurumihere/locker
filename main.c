@@ -4,6 +4,7 @@
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -21,10 +22,11 @@ static void
 usage(const char *name)
 {
         fprintf(stderr,
-                "usage: %s [-b radius] [-d factor] [-c rrggbb] [-B] [-h]\n"
+                "usage: %s [-b radius] [-d factor] [-c rrggbb] [-i type] [-B] [-h]\n"
                 "  -b radius   blur radius (default: 3, 0 = off)\n"
                 "  -d factor   darken factor 0.0-1.0 (default: 0.3, 0 = off)\n"
                 "  -c rrggbb   solid background color instead of screenshot\n"
+                "  -i type     indicator type: 'circle' or 'dots' (default: circle)\n"
                 "  -B          daemon mode, lock on SIGUSR1\n"
                 "  -h          show this help\n",
                 name);
@@ -37,9 +39,10 @@ main(int argc, char **argv)
         double darken = 0.3;
         const char *bg_color = NULL;
         int daemon = 0;
+        IndicatorType ind_type = INDICATOR_CIRCLE;
 
         int ch;
-        while ((ch = getopt(argc, argv, "b:d:c:hB")) != -1) {
+        while ((ch = getopt(argc, argv, "b:d:c:i:hB")) != -1) {
                 switch (ch) {
                 case 'b':
                         blur_radius = atoi(optarg);
@@ -49,6 +52,13 @@ main(int argc, char **argv)
                         break;
                 case 'c':
                         bg_color = optarg;
+                        break;
+                case 'i':
+                        if (strcmp(optarg, "dots") == 0) {
+                                ind_type = INDICATOR_DOTS;
+                        } else {
+                                ind_type = INDICATOR_CIRCLE;
+                        }
                         break;
                 case 'B':
                         daemon = 1;
@@ -95,7 +105,7 @@ main(int argc, char **argv)
                         if (want_lock && !locked) {
                                 locked = 1;
                                 want_lock = 0;
-                                x11_run(blur_radius, darken, bg_color);
+                                x11_run(blur_radius, darken, bg_color, ind_type);
                                 locked = 0;
                                 want_lock = 0;
                                 struct timespec ts = {0, 250000000L};
@@ -106,5 +116,5 @@ main(int argc, char **argv)
                 }
         }
 
-        return x11_run(blur_radius, darken, bg_color);
+        return x11_run(blur_radius, darken, bg_color, ind_type);
 }
