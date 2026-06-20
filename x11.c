@@ -308,7 +308,7 @@ x11_draw_indicator(Drawable pm, int count, const char *state, IndicatorType ind_
                 int spacing = 20;
 
                 if (strcmp(state, "wrong") == 0) {
-                        int n = 5;
+                        int n = count;
                         int start_x = cx - ((n - 1) * spacing) / 2;
                         XSetForeground(d, gc, color_ring_err);
                         for (int i = 0; i < n; i++) {
@@ -513,11 +513,12 @@ x11_run(int blur_radius, double darken, const char *bg_color, IndicatorType ind_
                                 int auth_result = -1;
                                 if (read(auth_pipe[0], &auth_result, sizeof(auth_result)) == sizeof(auth_result)) {
                                         auth_in_progress = 0;
-                                        auth_dots_count = 0;
                                         if (auth_result == 0) {
+                                                auth_dots_count = 0;
                                                 break;
                                         }
-                                        x11_redraw(win, img, "Wrong password", 0, bg_pixel, ind_type);
+                                        x11_redraw(win, img, "Wrong password", auth_dots_count, bg_pixel, ind_type);
+                                        auth_dots_count = 0;
                                 }
                         }
 
@@ -575,17 +576,19 @@ x11_run(int blur_radius, double darken, const char *bg_color, IndicatorType ind_
                                 } else {
                                         int ok = locker_pam_auth(username, password);
                                         auth_in_progress = 0;
-                                        auth_dots_count = 0;
-                                        if (ok == 0)
+                                        if (ok == 0) {
+                                                auth_dots_count = 0;
                                                 break;
-                                        x11_redraw(win, img, "Wrong password", 0, bg_pixel, ind_type);
+                                        }
+                                        x11_redraw(win, img, "Wrong password", auth_dots_count, bg_pixel, ind_type);
+                                        auth_dots_count = 0;
                                         free(task);
                                 }
                         } else {
                                 int ok = locker_pam_auth(username, password);
                                 if (ok == 0)
                                         break;
-                                x11_redraw(win, img, "Wrong password", 0, bg_pixel, ind_type);
+                                x11_redraw(win, img, "Wrong password", pos, bg_pixel, ind_type);
                         }
 
                         secure_zero(password, sizeof(password));
