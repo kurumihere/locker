@@ -264,24 +264,34 @@ x11_hide_cursor(Window win)
 int
 x11_grab_input(Window win)
 {
-        while (1) {
+        int max_attempts = 100;
+
+        for (int i = 0; i < max_attempts; i++) {
                 if (XGrabKeyboard(d, win, True, GrabModeAsync, GrabModeAsync,
                                   CurrentTime) == GrabSuccess)
-                        break;
+                        goto keyboard_ok;
                 struct timespec ts = {0, 50000000L};
                 nanosleep(&ts, NULL);
         }
+        fprintf(stderr, "x11: failed to grab keyboard after %d attempts\n",
+                max_attempts);
+        return -1;
 
-        while (XGrabPointer(d, win, True,
-                            ButtonPressMask | ButtonReleaseMask |
-                                PointerMotionMask,
-                            GrabModeAsync, GrabModeAsync, win, None,
-                            CurrentTime) != GrabSuccess) {
+keyboard_ok:
+        for (int i = 0; i < max_attempts; i++) {
+                if (XGrabPointer(d, win, True,
+                                 ButtonPressMask | ButtonReleaseMask |
+                                     PointerMotionMask,
+                                 GrabModeAsync, GrabModeAsync, win, None,
+                                 CurrentTime) == GrabSuccess)
+                        return 0;
                 struct timespec ts = {0, 50000000L};
                 nanosleep(&ts, NULL);
         }
-
-        return 0;
+        fprintf(stderr, "x11: failed to grab pointer after %d attempts\n",
+                max_attempts);
+        XUngrabKeyboard(d, CurrentTime);
+        return -1;
 }
 
 void
@@ -450,7 +460,13 @@ x11_run(int blur_radius, double darken, const char *bg_color, IndicatorType ind_
         x11_hide_cursor(win);
         XFlush(d);
 
-        x11_grab_input(win);
+        if (x11_grab_input(win) != 0) {
+                fprintf(stderr, "x11: failed to grab input\n");
+                x11_destroy_image(img);
+                XDestroyWindow(d, win);
+                x11_cleanup();
+                return 1;
+        }
 
         x11_lock_layout();
         XScreenSaverSuspend(d, True);
