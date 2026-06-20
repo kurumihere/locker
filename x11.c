@@ -5,12 +5,14 @@
 #include <X11/XKBlib.h>
 #include <X11/Xft/Xft.h>
 #include <X11/Xutil.h>
+#include <X11/extensions/dpms.h>
 #include <X11/extensions/scrnsaver.h>
 #include <X11/keysym.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/select.h>
 #include <time.h>
 
 static Display *d = NULL;
@@ -347,8 +349,40 @@ x11_run(int blur_radius, double darken, const char *bg_color)
         x11_draw_message(win, draw, "Enter password:");
         x11_draw_indicator(win, draw, 0);
 
-        XEvent ev;
-        while (x11_next_event(&ev) == 0) {
+        int has_dpms = 0;
+        int dummy1, dummy2;
+        if (DPMSQueryExtension(d, &dummy1, &dummy2)) {
+                has_dpms = 1;
+        }
+
+        int xfd = ConnectionNumber(d);
+        int screen_off = 0;
+
+        for (;;) {
+                if (XPending(d) == 0) {
+                        fd_set fds;
+                        FD_ZERO(&fds);
+                        FD_SET(xfd, &fds);
+                        struct timeval tv = {10, 0};
+
+                        int r = select(xfd + 1, &fds, NULL, NULL, &tv);
+                        if (r == 0 && has_dpms && !screen_off) {
+                                DPMSForceLevel(d, DPMSModeOff);
+                                XSync(d, False);
+                                screen_off = 1;
+                        }
+                        if (XPending(d) == 0)
+                                continue;
+                }
+
+                XEvent ev;
+                x11_next_event(&ev);
+
+                if (screen_off && has_dpms) {
+                        DPMSForceLevel(d, DPMSModeOn);
+                        XSync(d, False);
+                        screen_off = 0;
+                }
                 if (ev.type == Expose) {
                         x11_show_image(win, img);
                         x11_draw_message(win, draw, "Enter password:");
