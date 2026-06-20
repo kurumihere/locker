@@ -186,12 +186,31 @@ x11_create_window(unsigned long bg_pixel)
 }
 
 void
-x11_show_image(Window win, XImage *img)
+x11_redraw(Window win, XImage *img, const char *msg, int pos, unsigned long bg_pixel)
 {
-        if (img)
-                XPutImage(d, win, gc, img, 0, 0, 0, 0, win_w, win_h);
-        else
-                XClearWindow(d, win);
+        Pixmap pm = XCreatePixmap(d, win, win_w, win_h, DefaultDepth(d, screen));
+        if (!pm)
+                return;
+
+        if (img) {
+                XPutImage(d, pm, gc, img, 0, 0, 0, 0, win_w, win_h);
+        } else {
+                XSetForeground(d, gc, bg_pixel);
+                XFillRectangle(d, pm, gc, 0, 0, win_w, win_h);
+        }
+
+        XftDraw *pm_draw = XftDrawCreate(d, pm, DefaultVisual(d, screen),
+                                         DefaultColormap(d, screen));
+        if (pm_draw) {
+                if (msg)
+                        x11_draw_message(win, pm_draw, msg);
+                if (pos >= 0)
+                        x11_draw_indicator(win, pm_draw, pos);
+                XftDrawDestroy(pm_draw);
+        }
+
+        XCopyArea(d, pm, win, gc, 0, 0, win_w, win_h, 0, 0);
+        XFreePixmap(d, pm);
 }
 
 void
@@ -340,9 +359,7 @@ x11_run(int blur_radius, double darken, const char *bg_color)
         }
 
         Window win = x11_create_window(bg_pixel);
-        XftDraw *draw = XftDrawCreate(d, win, DefaultVisual(d, screen),
-                                      DefaultColormap(d, screen));
-        x11_show_image(win, img);
+        x11_redraw(win, img, NULL, -1, bg_pixel);
         x11_hide_cursor(win);
         XFlush(d);
 
@@ -377,8 +394,7 @@ x11_run(int blur_radius, double darken, const char *bg_color)
         }
         int auth_in_progress = 0;
 
-        x11_draw_message(win, draw, "Enter password:");
-        x11_draw_indicator(win, draw, 0);
+        x11_redraw(win, img, "Enter password:", 0, bg_pixel);
 
         int has_dpms = 0;
         int dummy1, dummy2;
@@ -412,9 +428,7 @@ x11_run(int blur_radius, double darken, const char *bg_color)
                                         if (auth_result == 0) {
                                                 break;
                                         }
-                                        x11_show_image(win, img);
-                                        x11_draw_message(win, draw, "Wrong password");
-                                        x11_draw_indicator(win, draw, 0);
+                                        x11_redraw(win, img, "Wrong password", 0, bg_pixel);
                                 }
                         }
 
@@ -431,12 +445,10 @@ x11_run(int blur_radius, double darken, const char *bg_color)
                         screen_off = 0;
                 }
                 if (ev.type == Expose) {
-                        x11_show_image(win, img);
                         if (auth_in_progress) {
-                                x11_draw_message(win, draw, "Authenticating...");
+                                x11_redraw(win, img, "Authenticating...", -1, bg_pixel);
                         } else {
-                                x11_draw_message(win, draw, "Enter password:");
-                                x11_draw_indicator(win, draw, pos);
+                                x11_redraw(win, img, "Enter password:", pos, bg_pixel);
                         }
                         continue;
                 }
@@ -453,9 +465,7 @@ x11_run(int blur_radius, double darken, const char *bg_color)
 
                 if (ks == XK_Return) {
                         if (password[0] == '\0') {
-                                x11_show_image(win, img);
-                                x11_draw_message(win, draw, "Enter password:");
-                                x11_draw_indicator(win, draw, 0);
+                                x11_redraw(win, img, "Enter password:", 0, bg_pixel);
                                 continue;
                         }
 
@@ -466,8 +476,7 @@ x11_run(int blur_radius, double darken, const char *bg_color)
                                 task->write_fd = auth_pipe[1];
 
                                 auth_in_progress = 1;
-                                x11_show_image(win, img);
-                                x11_draw_message(win, draw, "Authenticating...");
+                                x11_redraw(win, img, "Authenticating...", -1, bg_pixel);
                                 XFlush(d);
 
                                 pthread_t thread;
@@ -478,18 +487,14 @@ x11_run(int blur_radius, double darken, const char *bg_color)
                                         auth_in_progress = 0;
                                         if (ok == 0)
                                                 break;
-                                        x11_show_image(win, img);
-                                        x11_draw_message(win, draw, "Wrong password");
-                                        x11_draw_indicator(win, draw, 0);
+                                        x11_redraw(win, img, "Wrong password", 0, bg_pixel);
                                         free(task);
                                 }
                         } else {
                                 int ok = locker_pam_auth(username, password);
                                 if (ok == 0)
                                         break;
-                                x11_show_image(win, img);
-                                x11_draw_message(win, draw, "Wrong password");
-                                x11_draw_indicator(win, draw, 0);
+                                x11_redraw(win, img, "Wrong password", 0, bg_pixel);
                         }
 
                         secure_zero(password, sizeof(password));
@@ -498,17 +503,13 @@ x11_run(int blur_radius, double darken, const char *bg_color)
                 } else if (ks == XK_Escape) {
                         secure_zero(password, sizeof(password));
                         pos = 0;
-                        x11_show_image(win, img);
-                        x11_draw_message(win, draw, "Enter password:");
-                        x11_draw_indicator(win, draw, 0);
+                        x11_redraw(win, img, "Enter password:", 0, bg_pixel);
 
                 } else if (ks == XK_BackSpace) {
                         if (pos > 0)
                                 password[--pos] = '\0';
 
-                        x11_show_image(win, img);
-                        x11_draw_message(win, draw, "Enter password:");
-                        x11_draw_indicator(win, draw, pos);
+                        x11_redraw(win, img, "Enter password:", pos, bg_pixel);
 
                 } else if (len > 0) {
                         int added = 0;
@@ -524,9 +525,7 @@ x11_run(int blur_radius, double darken, const char *bg_color)
                         }
 
                         if (added) {
-                                x11_show_image(win, img);
-                                x11_draw_message(win, draw, "Enter password:");
-                                x11_draw_indicator(win, draw, pos);
+                                x11_redraw(win, img, "Enter password:", pos, bg_pixel);
                         }
                 }
         }
@@ -534,8 +533,6 @@ x11_run(int blur_radius, double darken, const char *bg_color)
         close(auth_pipe[0]);
         close(auth_pipe[1]);
 
-        if (draw)
-                XftDrawDestroy(draw);
         x11_ungrab_input();
         x11_restore_layout();
         XScreenSaverSuspend(d, False);
