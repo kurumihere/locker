@@ -475,9 +475,21 @@ x11_run(int blur_radius, double darken, const char *bg_color, IndicatorType ind_
         XScreenSaverSuspend(d, True);
         XFlush(d);
 
+        int auth_pipe[2];
+        if (pipe(auth_pipe) != 0) {
+                fprintf(stderr, "x11: failed to create auth pipe\n");
+                x11_ungrab_input();
+                x11_restore_layout();
+                x11_destroy_image(img);
+                x11_cleanup();
+                return 1;
+        }
+
         char *username = getenv("USER");
         if (!username) {
                 fprintf(stderr, "x11: $USER not set\n");
+                close(auth_pipe[0]);
+                close(auth_pipe[1]);
                 x11_ungrab_input();
                 x11_restore_layout();
                 x11_destroy_image(img);
@@ -488,16 +500,6 @@ x11_run(int blur_radius, double darken, const char *bg_color, IndicatorType ind_
         char password[256];
         int pos = 0;
         password[0] = '\0';
-
-        int auth_pipe[2];
-        if (pipe(auth_pipe) != 0) {
-                fprintf(stderr, "x11: failed to create auth pipe\n");
-                x11_ungrab_input();
-                x11_restore_layout();
-                x11_destroy_image(img);
-                x11_cleanup();
-                return 1;
-        }
         int auth_in_progress = 0;
         int auth_dots_count = 0;
 
