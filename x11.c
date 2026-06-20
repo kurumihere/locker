@@ -5,7 +5,7 @@
  * See LICENSE for details.
  */
 
-#define _GNU_SOURCE
+#define _POSIX_C_SOURCE 200809L
 #include "x11.h"
 #include "pam_auth.h"
 #include "util.h"
@@ -408,7 +408,7 @@ auth_thread_func(void *arg)
 {
 	struct auth_task *task = arg;
 	int ok = locker_pam_auth(task->username, task->password);
-	explicit_bzero(task->password, sizeof(task->password));
+	secure_zero(task->password, sizeof(task->password));
 	ssize_t written = write(task->write_fd, &ok, sizeof(ok));
 	(void)written;
 	free(task);
@@ -591,11 +591,11 @@ x11_run(int blur_radius, double darken, const char *bg_color, IndicatorType ind_
                                 x11_redraw(win, img, "Wrong password", pos, bg_pixel, ind_type);
                         }
 
-                        explicit_bzero(password, sizeof(password));
+                        secure_zero(password, sizeof(password));
                         pos = 0;
 
                 } else if (ks == XK_Escape) {
-                        explicit_bzero(password, sizeof(password));
+                        secure_zero(password, sizeof(password));
                         pos = 0;
                         x11_redraw(win, img, "Enter password:", 0, bg_pixel, ind_type);
 
