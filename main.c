@@ -8,6 +8,7 @@
 #define _POSIX_C_SOURCE 200809L
 #include "backend.h"
 #include <fcntl.h>
+#include <locale.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -45,6 +46,8 @@ usage(const char *name)
 int
 main(int argc, char **argv)
 {
+        setlocale(LC_ALL, "");
+
         int blur_radius = 3;
         double darken = 0.3;
         const char *bg_color = NULL;
