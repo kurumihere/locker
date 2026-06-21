@@ -126,6 +126,7 @@ main(int argc, char **argv)
 
                 sa.sa_handler = SIG_IGN;
                 sigaction(SIGCHLD, &sa, NULL);
+                sigaction(SIGPIPE, &sa, NULL);
 
                 for (;;) {
                         if (want_lock && !locked) {
@@ -134,7 +135,6 @@ main(int argc, char **argv)
                                 x11_run(blur_radius, darken, bg_color,
                                         ind_type);
                                 locked = 0;
-                                want_lock = 0;
                                 struct timespec ts = {0, 250000000L};
                                 nanosleep(&ts, NULL);
                                 continue;
