@@ -5,6 +5,7 @@
  * See LICENSE for details.
  */
 
+#include <X11/Xlib.h>
 #define _POSIX_C_SOURCE 200809L
 #include "x11.h"
 #include "pam_auth.h"
@@ -685,6 +686,8 @@ x11_run(int blur_radius, double darken, const char *bg_color,
         secure_zero(password, sizeof(password));
         close(auth_pipe[0]);
         close(auth_pipe[1]);
+
+        XDestroyWindow(d, win);
 
         x11_ungrab_input();
         x11_restore_layout();
