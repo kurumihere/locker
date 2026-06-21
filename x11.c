@@ -426,13 +426,20 @@ struct auth_task {
         int write_fd;
 };
 
+struct auth_result {
+        int ok;
+        char err_msg[256];
+};
+
 static void *
 auth_thread_func(void *arg)
 {
         struct auth_task *task = arg;
-        int ok = locker_pam_auth(task->username, task->password);
+        struct auth_result res = {0};
+        res.ok = locker_pam_auth(task->username, task->password, res.err_msg,
+                                 sizeof(res.err_msg));
         secure_zero(task->password, sizeof(task->password));
-        ssize_t written = write(task->write_fd, &ok, sizeof(ok));
+        ssize_t written = write(task->write_fd, &res, sizeof(res));
         (void)written;
         free(task);
         return NULL;
@@ -551,16 +558,18 @@ x11_run(int blur_radius, double darken, const char *bg_color,
                         }
 
                         if (r > 0 && FD_ISSET(auth_pipe[0], &fds)) {
-                                int auth_result = -1;
-                                if (read(auth_pipe[0], &auth_result,
-                                         sizeof(auth_result)) ==
-                                    sizeof(auth_result)) {
+                                struct auth_result res = {0};
+                                if (read(auth_pipe[0], &res, sizeof(res)) ==
+                                    sizeof(res)) {
                                         auth_in_progress = 0;
-                                        if (auth_result == 0) {
+                                        if (res.ok == 0) {
                                                 auth_dots_count = 0;
                                                 break;
                                         }
-                                        x11_redraw(win, img, "Wrong password",
+                                        const char *msg = "Wrong password";
+                                        if (res.err_msg[0] != '\0')
+                                                msg = res.err_msg;
+                                        x11_redraw(win, img, msg,
                                                    auth_dots_count, bg_pixel,
                                                    ind_type);
                                         auth_dots_count = 0;
@@ -637,8 +646,8 @@ x11_run(int blur_radius, double darken, const char *bg_color,
                                                    task) == 0) {
                                         pthread_detach(thread);
                                 } else {
-                                        int ok =
-                                            locker_pam_auth(username, password);
+                                        int ok = locker_pam_auth(
+                                            username, password, NULL, 0);
                                         auth_in_progress = 0;
                                         secure_zero(task->password,
                                                     sizeof(task->password));
@@ -653,7 +662,8 @@ x11_run(int blur_radius, double darken, const char *bg_color,
                                         auth_dots_count = 0;
                                 }
                         } else {
-                                int ok = locker_pam_auth(username, password);
+                                int ok = locker_pam_auth(username, password,
+                                                         NULL, 0);
                                 if (ok == 0)
                                         break;
                                 x11_redraw(win, img, "Wrong password", pos,

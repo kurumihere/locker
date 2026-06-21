@@ -13,11 +13,17 @@
 #include <string.h>
 #include <unistd.h>
 
+struct pam_appdata {
+        const char *password;
+        char *err_msg;
+        size_t err_msg_size;
+};
+
 static int
 pam_conv_cb(int num_msg, const struct pam_message **msg,
-            struct pam_response **resp, void *appdata)
+            struct pam_response **resp, void *appdata_ptr)
 {
-        const char *password = (const char *)appdata;
+        struct pam_appdata *appdata = (struct pam_appdata *)appdata_ptr;
 
         *resp = calloc(num_msg, sizeof(struct pam_response));
         if (!*resp)
@@ -26,15 +32,31 @@ pam_conv_cb(int num_msg, const struct pam_message **msg,
         for (int i = 0; i < num_msg; i++) {
                 switch (msg[i]->msg_style) {
                 case PAM_PROMPT_ECHO_OFF:
-                        if (!password)
+                        if (!appdata->password)
                                 goto fail;
-                        (*resp)[i].resp = strdup(password);
+                        (*resp)[i].resp = strdup(appdata->password);
                         if (!(*resp)[i].resp)
                                 goto fail;
                         break;
                 case PAM_PROMPT_ECHO_ON:
+                        (*resp)[i].resp = strdup("");
+                        if (!(*resp)[i].resp)
+                                goto fail;
+                        break;
                 case PAM_ERROR_MSG:
                 case PAM_TEXT_INFO:
+                        if (appdata->err_msg && appdata->err_msg_size > 0 &&
+                            msg[i]->msg) {
+                                snprintf(appdata->err_msg,
+                                         appdata->err_msg_size, "%s",
+                                         msg[i]->msg);
+                                for (size_t j = 0; j < strlen(appdata->err_msg);
+                                     j++) {
+                                        if (appdata->err_msg[j] == '\n' ||
+                                            appdata->err_msg[j] == '\r')
+                                                appdata->err_msg[j] = ' ';
+                                }
+                        }
                         (*resp)[i].resp = strdup("");
                         if (!(*resp)[i].resp)
                                 goto fail;
@@ -53,15 +75,20 @@ fail:
 }
 
 int
-locker_pam_auth(const char *username, const char *password)
+locker_pam_auth(const char *username, const char *password, char *err_msg,
+                size_t err_msg_size)
 {
+        if (err_msg && err_msg_size > 0)
+                err_msg[0] = '\0';
+
         if (!username || !password)
                 return -1;
 
         static const char *services[] = {"system-auth", "common-auth", "login",
                                          "passwd", NULL};
 
-        const struct pam_conv conv = {pam_conv_cb, (void *)password};
+        struct pam_appdata appdata = {password, err_msg, err_msg_size};
+        const struct pam_conv conv = {pam_conv_cb, &appdata};
         pam_handle_t *pamh = NULL;
 
         for (int i = 0; services[i]; i++) {
