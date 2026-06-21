@@ -453,6 +453,7 @@ x11_run(int blur_radius, double darken, const char *bg_color,
         unsigned long bg_pixel = 0;
 
         if (bg_color) {
+                char colorbuf[8];
                 unsigned long rgb;
                 if (parse_hex(bg_color, &rgb) != 0) {
                         fprintf(stderr, "x11: invalid color '%s'\n", bg_color);
@@ -460,6 +461,8 @@ x11_run(int blur_radius, double darken, const char *bg_color,
                         return 1;
                 }
                 bg_pixel = rgb;
+                snprintf(colorbuf, sizeof(colorbuf), "#%06lx", rgb);
+                bg_pixel = x11_get_color(colorbuf);
         } else {
                 img = x11_capture_screen();
                 if (!img) {
