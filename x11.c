@@ -342,19 +342,7 @@ x11_draw_indicator(Drawable pm, int count, const char *state,
                                 XFillArc(d, pm, gc, start_x + i * spacing - r,
                                          cy - r, 2 * r, 2 * r, 0, 360 * 64);
                         }
-                } else if (count == 0) {
-                        int n = 5;
-                        int start_x = cx - ((n - 1) * spacing) / 2;
-                        XSetLineAttributes(d, gc, 2, LineSolid, CapRound,
-                                           JoinRound);
-                        XSetForeground(d, gc, color_ring_idle);
-                        for (int i = 0; i < n; i++) {
-                                XDrawArc(d, pm, gc, start_x + i * spacing - r,
-                                         cy - r, 2 * r, 2 * r, 0, 360 * 64);
-                        }
-                        XSetLineAttributes(d, gc, 1, LineSolid, CapRound,
-                                           JoinRound);
-                } else {
+                } else if (count > 0) {
                         int start_x = cx - ((count - 1) * spacing) / 2;
                         XSetForeground(d, gc, color_ring_active);
                         for (int i = 0; i < count; i++) {
