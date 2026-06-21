@@ -172,13 +172,18 @@ x11_blur_image(XImage *img, int radius)
 }
 
 void
-x11_darken_image(XImage *img, double factor)
+x11_tint_image(XImage *img, double factor, unsigned long tint_rgb)
 {
         if (img->bits_per_pixel != 32 || factor <= 0.0)
                 return;
-        double brightness = 1.0 - factor;
-        if (brightness < 0.0)
-                brightness = 0.0;
+        double orig_factor = 1.0 - factor;
+        if (orig_factor < 0.0)
+                orig_factor = 0.0;
+
+        unsigned char tr = (tint_rgb >> 16) & 0xFF;
+        unsigned char tg = (tint_rgb >> 8) & 0xFF;
+        unsigned char tb = tint_rgb & 0xFF;
+
         uint32_t *data = (uint32_t *)img->data;
         for (int y = 0; y < img->height; y++) {
                 for (int x = 0; x < img->width; x++) {
@@ -186,10 +191,12 @@ x11_darken_image(XImage *img, double factor)
                         unsigned char r = (p >> 16) & 0xFF;
                         unsigned char g = (p >> 8) & 0xFF;
                         unsigned char b = (p) & 0xFF;
-                        p = (0xFFUL << 24) |
-                            ((unsigned char)(r * brightness) << 16) |
-                            ((unsigned char)(g * brightness) << 8) |
-                            (unsigned char)(b * brightness);
+
+                        r = (unsigned char)(r * orig_factor + tr * factor);
+                        g = (unsigned char)(g * orig_factor + tg * factor);
+                        b = (unsigned char)(b * orig_factor + tb * factor);
+
+                        p = (0xFFUL << 24) | (r << 16) | (g << 8) | b;
                         data[y * img->width + x] = p;
                 }
         }
@@ -439,30 +446,28 @@ x11_run(int blur_radius, double darken, const char *bg_color,
                 return 1;
 
         XImage *img = NULL;
-        unsigned long bg_pixel = 0;
+        unsigned long bg_pixel = BlackPixel(d, screen);
+        unsigned long tint_rgb = 0;
 
         if (bg_color) {
-                char colorbuf[8];
-                unsigned long rgb;
-                if (parse_hex(bg_color, &rgb) != 0) {
+                if (parse_hex(bg_color, &tint_rgb) != 0) {
                         fprintf(stderr, "x11: invalid color '%s'\n", bg_color);
                         x11_cleanup();
                         return 1;
                 }
-                snprintf(colorbuf, sizeof(colorbuf), "#%06lx", rgb);
-                bg_pixel = x11_get_color(colorbuf);
-        } else {
-                img = x11_capture_screen();
-                if (!img) {
-                        fprintf(stderr, "x11: failed to capture screen\n");
-                        x11_cleanup();
-                        return 1;
-                }
-                if (blur_radius > 0)
-                        x11_blur_image(img, blur_radius);
-                if (darken > 0)
-                        x11_darken_image(img, darken);
         }
+
+        img = x11_capture_screen();
+        if (!img) {
+                fprintf(stderr, "x11: failed to capture screen\n");
+                x11_cleanup();
+                return 1;
+        }
+
+        if (blur_radius > 0)
+                x11_blur_image(img, blur_radius);
+        if (darken > 0 || tint_rgb > 0)
+                x11_tint_image(img, darken > 0 ? darken : 0.3, tint_rgb);
 
         Window win = x11_create_window(bg_pixel);
         x11_redraw(win, img, NULL, -1, bg_pixel, ind_type);

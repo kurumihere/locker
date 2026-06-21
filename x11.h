@@ -17,7 +17,7 @@ void x11_cleanup(void);
 
 XImage *x11_capture_screen(void);
 void x11_blur_image(XImage *img, int radius);
-void x11_darken_image(XImage *img, double factor);
+void x11_tint_image(XImage *img, double factor, unsigned long tint_rgb);
 void x11_destroy_image(XImage *img);
 
 Window x11_create_window(unsigned long bg_pixel);
