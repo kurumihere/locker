@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 static int
 pam_conv_cb(int num_msg, const struct pam_message **msg,
@@ -57,13 +58,18 @@ locker_pam_auth(const char *username, const char *password)
         if (!username || !password)
                 return -1;
 
-        static const char *services[] = {"login", "system-auth", "common-auth",
+        static const char *services[] = {"system-auth", "common-auth", "login",
                                          "passwd", NULL};
 
         const struct pam_conv conv = {pam_conv_cb, (void *)password};
         pam_handle_t *pamh = NULL;
 
         for (int i = 0; services[i]; i++) {
+                char path[256];
+                snprintf(path, sizeof(path), "/etc/pam.d/%s", services[i]);
+                if (access(path, F_OK) != 0)
+                        continue;
+
                 pamh = NULL;
                 if (pam_start(services[i], username, &conv, &pamh) !=
                     PAM_SUCCESS)
