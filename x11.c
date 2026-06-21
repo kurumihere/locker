@@ -5,7 +5,6 @@
  * See LICENSE for details.
  */
 
-#include <X11/Xlib.h>
 #define _POSIX_C_SOURCE 200809L
 #include "x11.h"
 #include "pam_auth.h"
@@ -34,6 +33,8 @@ static int win_w, win_h;
 static XftFont *font = NULL;
 static XftColor color;
 static int old_kb_group = -1;
+static XIM xim = NULL;
+static XIC xic = NULL;
 
 static unsigned long color_bg;
 static unsigned long color_ring_idle;
@@ -460,7 +461,6 @@ x11_run(int blur_radius, double darken, const char *bg_color,
                         x11_cleanup();
                         return 1;
                 }
-                bg_pixel = rgb;
                 snprintf(colorbuf, sizeof(colorbuf), "#%06lx", rgb);
                 bg_pixel = x11_get_color(colorbuf);
         } else {
@@ -490,6 +490,14 @@ x11_run(int blur_radius, double darken, const char *bg_color,
         }
 
         x11_lock_layout();
+
+        xim = XOpenIM(d, NULL, NULL, NULL);
+        if (xim) {
+                xic = XCreateIC(xim, XNInputStyle,
+                                XIMPreeditNothing | XIMStatusNothing,
+                                XNClientWindow, win, XNFocusWindow, win, NULL);
+        }
+
         XScreenSaverSuspend(d, True);
         XFlush(d);
 
@@ -595,10 +603,19 @@ x11_run(int blur_radius, double darken, const char *bg_color,
                 if (auth_in_progress)
                         continue;
 
-                char buf[32] = {0};
-                KeySym ks;
-                int len = XLookupString(&ev.xkey, buf, sizeof(buf), &ks, NULL);
-
+                char buf[64] = {0};
+                KeySym ks = NoSymbol;
+                int len = 0;
+                if (xic) {
+                        Status xstatus;
+                        len = Xutf8LookupString(xic, &ev.xkey, buf,
+                                                sizeof(buf) - 1, &ks, &xstatus);
+                        buf[len] = '\0';
+                } else {
+                        len = XLookupString(&ev.xkey, buf, sizeof(buf), &ks,
+                                            NULL);
+                        buf[len] = '\0';
+                }
                 if (ks == XK_Return) {
                         if (password[0] == '\0') {
                                 x11_redraw(win, img, "Enter password:", 0,
@@ -660,26 +677,22 @@ x11_run(int blur_radius, double darken, const char *bg_color,
                                    ind_type);
 
                 } else if (ks == XK_BackSpace) {
-                        if (pos > 0)
-                                password[--pos] = '\0';
-
+                        if (pos > 0) {
+                                pos--;
+                                while (pos > 0 &&
+                                       (password[pos] & 0xC0) == 0x80)
+                                        pos--;
+                                password[pos] = '\0';
+                        }
                         x11_redraw(win, img, "Enter password:", pos, bg_pixel,
                                    ind_type);
 
-                } else if (len > 0) {
-                        int added = 0;
-                        for (int i = 0; i < len; i++) {
-                                unsigned char c = buf[i];
-                                if (c < 32 || c == 127)
-                                        continue;
-                                if (pos < (int)sizeof(password) - 1) {
-                                        password[pos++] = c;
-                                        password[pos] = '\0';
-                                        added = 1;
-                                }
-                        }
-
-                        if (added) {
+                } else if (len > 0 && (unsigned char)buf[0] >= 32 &&
+                           buf[0] != 127) {
+                        if (pos + len < (int)sizeof(password) - 1) {
+                                memcpy(password + pos, buf, len);
+                                pos += len;
+                                password[pos] = '\0';
                                 x11_redraw(win, img, "Enter password:", pos,
                                            bg_pixel, ind_type);
                         }
@@ -691,6 +704,13 @@ x11_run(int blur_radius, double darken, const char *bg_color,
         close(auth_pipe[1]);
 
         XDestroyWindow(d, win);
+
+        if (xic)
+                XDestroyIC(xic);
+        if (xim)
+                XCloseIM(xim);
+        xic = NULL;
+        xim = NULL;
 
         x11_ungrab_input();
         x11_restore_layout();

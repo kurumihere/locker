@@ -21,7 +21,8 @@ void x11_darken_image(XImage *img, double factor);
 void x11_destroy_image(XImage *img);
 
 Window x11_create_window(unsigned long bg_pixel);
-void x11_redraw(Window win, XImage *img, const char *msg, int pos, unsigned long bg_pixel, IndicatorType ind_type);
+void x11_redraw(Window win, XImage *img, const char *msg, int pos,
+                unsigned long bg_pixel, IndicatorType ind_type);
 void x11_hide_cursor(Window win);
 
 int x11_grab_input(Window win);
@@ -31,7 +32,8 @@ int x11_next_event(XEvent *ev);
 void x11_lock_layout(void);
 void x11_restore_layout(void);
 
-void x11_draw_indicator(Drawable pm, int count, const char *state, IndicatorType ind_type);
+void x11_draw_indicator(Drawable pm, int count, const char *state,
+                        IndicatorType ind_type);
 void x11_draw_message(Window win, XftDraw *draw, const char *msg);
 
 #endif
